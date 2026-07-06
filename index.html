@@ -14,7 +14,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
 
-  <!-- Firebase Legacy SDKs (Bäst för fristående HTML-filer utan byggverktyg) -->
+  <!-- Firebase Legacy SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
@@ -82,13 +82,13 @@
         serviceTitle: "🛠️ Service pågår",
         serviceDesc: "Färjan är för tillfället ur ordinarie drift.",
         liveText: "Uppdateras live från Pettu-linjen",
-        atDockPettu: "Färjan ligger vid kaj i Pettu ⚓",
-        atDockUto: "Färjan ligger vid kaj i Ulkoluoto ⚓",
-        enRoutePettu: "På väg mot Pettu 🚢",
-        enRouteUto: "På väg mot Ulkoluoto 🚢",
-        paused: "Färjan har paus just nu ☕",
+        atDockPettu: "Ligger vid kaj i Pettu ⚓",
+        atDockUto: "Ligger vid kaj i Ulkoluoto ⚓",
+        enRouteFromPettu: "Har avgått från Pettu 🚢",
+        enRouteFromUto: "Har avgått från Ulkoluoto 🚢",
         moving: "Rör på sig",
-        idle: "Ligger stilla"
+        idle: "Ligger stilla",
+        unknown: "Status okänd"
       },
       fi: {
         connecting: "Yhdistetään lauttaan...",
@@ -98,11 +98,11 @@
         liveText: "Päivitetään livenä Pettu-linjalta",
         atDockPettu: "Lossi on laiturissa Petussa ⚓",
         atDockUto: "Lossi on laiturissa Ulkoluodossa ⚓",
-        enRoutePettu: "Matkalla Pettuun 🚢",
-        enRouteUto: "Matkalla Ulkoluotoon 🚢",
-        paused: "Lossi on tauolla ☕",
+        enRouteFromPettu: "Lähtenyt Petusta 🚢",
+        enRouteFromUto: "Lähtenyt Ulkoluodosta 🚢",
         moving: "Liikkeessä",
-        idle: "Paikallaan"
+        idle: "Paikallaan",
+        unknown: "Tila tuntematon"
       }
     };
 
@@ -123,8 +123,7 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // --- LIVE-LYSSNARE PÅ DATABASE ---
-    // Lyssna på driftstatus (Normal vs Service)
+    // Lyssna på driftstatus
     db.ref('config/driftstatus').on('value', snapshot => {
       const status = snapshot.val();
       const banner = document.getElementById('serviceBanner');
@@ -135,8 +134,7 @@
       }
     });
 
-    // Lyssna på hastighet och tillstånd
-    // OBS: Anpassa dessa stigar om dina v8.2-noder heter något annat (t.ex. 'live/speed', 'state/current')
+    // Lyssna på den aktuella turen
     db.ref('turer/aktuell').on('value', snapshot => {
       const data = snapshot.val() || {};
       updateUI(data);
@@ -153,33 +151,35 @@
       const speed = parseFloat(data.avgSpeedKnots || data.speed || 0).toFixed(1);
       speedEl.innerText = speed;
       
-      // Animera en liten mätarstapel (max 15 knop för färjan)
-      const percentage = Math.min((speed / 15) * 100, 100);
+      const percentage = Math.min((speed / 12) * 100, 100);
       speedBar.style.width = `${percentage}%`;
-      if (speed > 0.5) {
+
+      // 2. Tolka plats utifrån fältet "from"
+      // Vi standardiserar texten så att både "Utö" och "Ulkoluoto" matchar rätt
+      const fromLocation = (data.from || "").toLowerCase();
+      const isMoving = speed > 0.5;
+
+      if (isMoving) {
         speedBar.className = "bg-emerald-500 h-full transition-all duration-500";
         subEl.innerText = `${lang.moving} (${speed} kn)`;
+        
+        if (fromLocation.includes("pettu")) {
+          textEl.innerText = lang.enRouteFromPettu;
+        } else if (fromLocation.includes("utö") || fromLocation.includes("uto")) {
+          textEl.innerText = lang.enRouteFromUto;
+        } else {
+          textEl.innerText = `${lang.moving} 🚢`;
+        }
       } else {
         speedBar.className = "bg-slate-600 h-full transition-all duration-500";
         subEl.innerText = lang.idle;
-      }
 
-      // 2. Hantera tillstånd/destination (Exempelmappning baserat på din tillståndsmaskin)
-      const state = data.state || ''; // t.ex. 'at_dock', 'en_route', 'break'
-      const dest = data.destination || ''; // 'Pettu' eller 'Utö' / 'Ulkoluoto'
-
-      if (state === 'break' || state === 'paus') {
-        textEl.innerText = lang.paused;
-      } else if (state === 'at_dock' || state === 'vid_kaj') {
-        textEl.innerText = dest === 'Pettu' ? lang.atDockPettu : lang.atDockUto;
-      } else if (state === 'en_route' || state === 'pa_vag') {
-        textEl.innerText = dest === 'Pettu' ? lang.enRoutePettu : lang.enRouteUto;
-      } else {
-        // Fallback om vi bara har hastighet men inget tillstånd än
-        if (speed > 0.5) {
-          textEl.innerText = dest ? `${lang.moving} ➡️ ${dest}` : `${lang.moving} 🚢`;
+        if (fromLocation.includes("pettu")) {
+          textEl.innerText = lang.atDockPettu;
+        } else if (fromLocation.includes("utö") || fromLocation.includes("uto")) {
+          textEl.innerText = lang.atDockUto;
         } else {
-          textEl.innerText = lang.idle + " ⚓";
+          textEl.innerText = `${lang.idle} ⚓`;
         }
       }
       
@@ -196,7 +196,6 @@
       document.getElementById('serviceTitle').innerText = lang.serviceTitle;
       document.getElementById('serviceDesc').innerText = lang.serviceDesc;
       
-      // Trigga om UI-uppdateringen med ny översättning om vi redan har data
       firebase.database().ref('turer/aktuell').once('value', snapshot => {
         if(snapshot.exists()) updateUI(snapshot.val());
       });

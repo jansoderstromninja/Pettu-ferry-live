@@ -1,1 +1,709 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pettu Färja — Live-status</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .font-mono-tabular {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+    }
+    .transition-all-custom {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+  </style>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            archipelago: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              800: '#075985',
+              900: '#0c4a6e',
+              950: '#020e17',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-archipelago-950 text-slate-100 min-h-screen flex flex-col justify-between selection:bg-sky-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-2">
+        <div class="w-8 h-8 rounded-lg bg-sky-600 flex items-center justify-center text-white font-bold shadow-lg shadow-sky-500/20">
+          <i data-lucide="ship" class="w-5 h-5 animate-pulse"></i>
+        </div>
+        <div>
+          <h1 id="app-title-header" class="text-base font-bold tracking-tight text-white">Pettu Färja</h1>
+          <p id="app-subtitle-header" class="text-[10px] text-slate-400 font-medium">Realtidsskärm för passagerare</p>
+        </div>
+      </div>
+      
+      <!-- Language Switcher -->
+      <div class="flex items-center bg-slate-800/80 p-0.5 rounded-full border border-slate-700/50">
+        <button id="lang-btn-sv" onclick="setLanguage('sv')" class="px-2.5 py-1 text-[11px] font-bold rounded-full transition-all duration-200 flex items-center gap-1 bg-sky-600 text-white shadow-sm">
+          <span>🇸🇪</span> <span>SV</span>
+        </button>
+        <button id="lang-btn-fi" onclick="setLanguage('fi')" class="px-2.5 py-1 text-[11px] font-bold rounded-full transition-all duration-200 flex items-center gap-1 text-slate-400 hover:text-white">
+          <span>🇫🇮</span> <span>FI</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="flex-1 w-full max-w-md mx-auto px-4 py-6 space-y-6 flex flex-col justify-center">
+
+    <!-- Active Service Banner (Hidden by default) -->
+    <div id="service-banner" class="hidden bg-gradient-to-r from-amber-500 to-yellow-600 text-slate-950 p-4 rounded-2xl border border-amber-400 shadow-xl shadow-amber-500/10 flex items-start space-x-3 transition-all-custom">
+      <div class="bg-slate-950/10 p-1.5 rounded-lg shrink-0 mt-0.5">
+        <i data-lucide="wrench" class="w-5 h-5 text-slate-950"></i>
+      </div>
+      <div class="space-y-1">
+        <h3 id="service-banner-title" class="font-bold text-sm tracking-tight">Underhåll pågår / Service</h3>
+        <p id="service-banner-desc" class="text-xs font-medium text-slate-900/90 leading-relaxed">
+          Färjan är ur ordinarie drift för planerat underhåll eller teknisk kontroll. Trafiken är tillfälligt stoppad.
+        </p>
+      </div>
+    </div>
+
+    <!-- MAIN PASSIVE STATUS CARD -->
+    <div id="status-card" class="bg-slate-900/60 rounded-3xl border border-slate-800/80 p-6 space-y-6 shadow-2xl relative overflow-hidden backdrop-blur-sm">
+      <!-- Glow effect inside -->
+      <div id="status-glow" class="absolute -inset-10 opacity-5 blur-3xl rounded-full transition-all duration-500 bg-sky-500"></div>
+
+      <div class="relative z-10 space-y-5">
+        
+        <!-- Top Status Bar & Sync Pulse -->
+        <div class="flex justify-between items-center border-b border-slate-800 pb-4">
+          <div class="flex items-center space-x-2 text-xs text-slate-400 font-medium">
+            <span class="relative flex h-2 w-2">
+              <span id="sync-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span id="sync-dot" class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span id="label-live-sync">Realtidssynk aktiv</span>
+          </div>
+          <span id="current-clock" class="font-mono-tabular text-xs font-semibold text-slate-400 bg-slate-950 px-2.5 py-1 rounded-md border border-slate-800/50">00:00:00</span>
+        </div>
+
+        <!-- Major Status Header -->
+        <div class="space-y-2 text-center py-2">
+          <div id="status-icon-badge" class="w-14 h-14 rounded-full bg-sky-500/10 border border-sky-500/20 text-sky-400 flex items-center justify-center mx-auto text-2xl shadow-inner mb-3">
+            <i data-lucide="anchor" class="w-6 h-6"></i>
+          </div>
+          <h2 id="status-headline" class="text-xl font-extrabold tracking-tight text-white leading-snug">
+            Söker efter färjans position...
+          </h2>
+          <p id="status-subline" class="text-xs text-slate-400 font-medium tracking-wide">
+            Synkroniserar med sista kända tidsstämpel
+          </p>
+        </div>
+
+        <!-- Smart Speedometer Component -->
+        <div class="bg-slate-950/60 rounded-2xl border border-slate-800/80 p-4 flex items-center justify-between">
+          <div class="space-y-0.5">
+            <p id="label-speedometer" class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Färjans fart</p>
+            <div class="flex items-baseline space-x-1.5">
+              <span id="speed-value" class="font-mono-tabular text-4xl font-extrabold text-slate-200">0.0</span>
+              <span class="text-xs font-semibold text-slate-400">knop</span>
+            </div>
+          </div>
+          <div id="speed-indicator-light" class="flex items-center space-x-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+            <span id="speed-indicator-pulse" class="h-2 w-2 rounded-full bg-slate-500"></span>
+            <span id="speed-indicator-text" class="text-[11px] font-bold text-slate-400">Ligger stilla</span>
+          </div>
+        </div>
+
+        <!-- Arrival & Direction Summary Block -->
+        <div class="grid grid-cols-2 gap-3.5 pt-1">
+          <div class="bg-slate-950/40 p-3.5 rounded-xl border border-slate-800/60 space-y-1">
+            <p id="label-next-eta" class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Beräknat ETA</p>
+            <p id="display-eta" class="font-mono-tabular text-lg font-bold text-sky-400">--:--</p>
+          </div>
+          <div class="bg-slate-950/40 p-3.5 rounded-xl border border-slate-800/60 space-y-1">
+            <p id="label-destination" class="text-[10px] uppercase tracking-wider text-slate-500 font-bold">Destination</p>
+            <p id="display-destination" class="text-sm font-bold text-slate-200 truncate">Utö (Ulkoluoto)</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Active Navigation Deep Link Button -->
+    <a href="https://www.google.com/maps/dir/?api=1&destination=60.0385,22.9226" target="_blank" rel="noopener noreferrer" 
+       class="w-full bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white border border-slate-800 hover:border-slate-700 font-semibold py-3.5 px-4 rounded-2xl shadow-xl flex items-center justify-center space-x-2.5 transition-all duration-200 select-none text-xs">
+      <i data-lucide="navigation" class="w-4 h-4 text-sky-400"></i>
+      <span id="label-btn-navigation">Öppna färjeläge i Google Maps Navigation</span>
+    </a>
+
+    <!-- Demo / Simulation Testing Panel -->
+    <div class="bg-slate-900/40 rounded-2xl border border-slate-800/60 p-4 space-y-4">
+      <button onclick="toggleDemoPanel()" class="w-full flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-400 focus:outline-none">
+        <span class="flex items-center gap-1.5 text-amber-500">
+          <i data-lucide="settings" class="w-3.5 h-3.5"></i>
+          <span id="label-demo-title">⚙️ Testpanel / Demoläge</span>
+        </span>
+        <i id="demo-caret" data-lucide="chevron-down" class="w-4 h-4 transition-transform text-slate-500"></i>
+      </button>
+
+      <div id="demo-content" class="hidden space-y-4 pt-3 border-t border-slate-800/60 text-xs">
+        <!-- Toggle Source -->
+        <div class="flex items-center justify-between bg-slate-950/40 p-2.5 rounded-xl border border-slate-800/50">
+          <span id="label-demo-source" class="font-medium text-slate-300">Datakälla</span>
+          <div class="flex space-x-1 p-0.5 bg-slate-900 rounded-lg">
+            <button onclick="setDataSource('real')" id="source-btn-real" class="px-2.5 py-1 rounded-md text-[10px] font-bold text-slate-400 hover:text-white transition">
+              Firebase
+            </button>
+            <button onclick="setDataSource('sim')" id="source-btn-sim" class="px-2.5 py-1 rounded-md text-[10px] font-bold bg-sky-600 text-white shadow-sm transition">
+              Demo / Sim
+            </button>
+          </div>
+        </div>
+
+        <!-- Simulated Inputs -->
+        <div id="simulated-controls" class="space-y-3 pt-1">
+          <!-- Driftstatus Override -->
+          <div class="flex items-center justify-between">
+            <span id="label-demo-drift" class="text-slate-300">Driftstatus</span>
+            <select id="sim-drift-select" onchange="handleSimDriftChange(this.value)" class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none">
+              <option value="normal" selected>Normal drift</option>
+              <option value="service">Service pågår 🛠️</option>
+            </select>
+          </div>
+
+          <!-- Ferry State Selector -->
+          <div class="flex items-center justify-between">
+            <span id="label-demo-state" class="text-slate-300">Färjestatus</span>
+            <select id="sim-state-select" onchange="handleSimStateChange(this.value)" class="bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-200 focus:outline-none">
+              <option value="vid kaj utö">Vid kaj i Utö</option>
+              <option value="vid kaj pettu" selected>Vid kaj i Pettu</option>
+              <option value="på väg till utö">På väg till Utö</option>
+              <option value="på väg till pettu">På väg till Pettu</option>
+              <option value="paus">Färjan har paus ☕</option>
+              <option value="okänt">Okänd position</option>
+            </select>
+          </div>
+
+          <!-- Speed slider -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between">
+              <span id="label-demo-speed" class="text-slate-300">Färjans fart</span>
+              <span id="sim-speed-val" class="font-mono text-sky-400 font-semibold">0.0 knop</span>
+            </div>
+            <input type="range" id="sim-speed-slider" min="0" max="15" step="0.5" value="0" oninput="handleSimSpeedSlider(this.value)"
+                   class="w-full h-1 bg-slate-850 rounded-lg appearance-none cursor-pointer accent-sky-500">
+          </div>
+
+          <!-- ETA slider -->
+          <div class="space-y-1.5">
+            <div class="flex justify-between">
+              <span id="label-demo-eta" class="text-slate-300">ETA (om minuter)</span>
+              <span id="sim-eta-val" class="font-mono text-sky-400 font-semibold">om 12 min</span>
+            </div>
+            <input type="range" id="sim-eta-slider" min="1" max="45" value="12" oninput="handleSimEtaSlider(this.value)"
+                   class="w-full h-1 bg-slate-850 rounded-lg appearance-none cursor-pointer accent-sky-500">
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="text-center py-5 border-t border-slate-900 bg-slate-950/80 text-[10px] text-slate-500 space-y-1">
+    <p>Pettu & Utö (Ulkoluoto) live-status © 2026</p>
+    <p id="label-footer-note">Drivs av Firebase Realtime Database • Uppdateras automatiskt</p>
+  </footer>
+
+  <!-- Firebase & Reactive App Logic -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    // Standard Firebase configuration for the app
+    const firebaseConfig = {
+      apiKey: "AIzaSyD_EXAMPLE_KEY_FOR_PAGANGERARE_HTML",
+      authDomain: "pettu-farja.firebaseapp.com",
+      databaseURL: "https://pettu-farja-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "pettu-farja",
+      storageBucket: "pettu-farja.appspot.com",
+      messagingSenderId: "1234567890",
+      appId: "1:1234567890:web:abcdef123456"
+    };
+
+    let app, db;
+    let hasFirebaseConnected = false;
+
+    // Guard initialization
+    try {
+      if (firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("EXAMPLE")) {
+        app = initializeApp(firebaseConfig);
+        db = getDatabase(app);
+        hasFirebaseConnected = true;
+        console.log("Firebase initialized successfully inside passagerare.html");
+      } else {
+        console.warn("Firebase config has placeholder API key. Running in Sim mode.");
+      }
+    } catch (e) {
+      console.error("Firebase failed to load:", e);
+    }
+
+    // Coordinates mapping or state mapping
+    const state = {
+      lang: localStorage.getItem('pettu_lang') || 'sv',
+      dataSource: 'sim', // default to sim unless firebase connected successfully
+      driftstatus: 'normal', // 'normal', 'service'
+      ferryState: 'vid kaj pettu', // 'vid kaj utö', 'vid kaj pettu', 'på väg till utö', 'på väg till pettu', 'paus', 'okänt'
+      speed: 0.0,
+      etaMinutes: 12,
+      destination: 'Utö (Ulkoluoto)'
+    };
+
+    // If Firebase successfully connected, let's switch default to real
+    if (hasFirebaseConnected) {
+      state.dataSource = 'real';
+      document.getElementById('source-btn-real').className = "px-2.5 py-1 rounded-md text-[10px] font-bold bg-sky-600 text-white shadow-sm transition";
+      document.getElementById('source-btn-sim').className = "px-2.5 py-1 rounded-md text-[10px] font-bold text-slate-400 hover:text-white transition";
+    }
+
+    // Translation dictionary for Stockholm skärgårds-vibes
+    const translations = {
+      sv: {
+        titleHeader: "Pettu Färja",
+        subtitleHeader: "Realtidsskärm för passagerare",
+        liveSyncActive: "Realtidssynk aktiv",
+        liveSyncSim: "Demoläge aktivt",
+        speedometer: "Färjans fart",
+        speedStopped: "Ligger stilla",
+        speedMoving: "Kör",
+        nextEta: "Beräknat ETA",
+        destinationLabel: "Destination",
+        btnNavigation: "Öppna färjeläge i Google Maps Navigation",
+        demoTitle: "⚙️ Testpanel / Demoläge",
+        demoSource: "Datakälla",
+        demoDrift: "Driftstatus",
+        demoState: "Färjestatus",
+        demoSpeed: "Färjans fart",
+        demoEta: "ETA (om minuter)",
+        footerNote: "Drivs av Firebase Realtime Database • Uppdateras automatiskt",
+        
+        // Dynamic Status Headings
+        state_at_pettu: "Ligger vid kaj i Pettu ⚓",
+        state_at_uto: "Ligger vid kaj i Utö (Ulkoluoto) ⚓",
+        state_to_uto: "Färjan är på väg till Utö 🚢",
+        state_to_pettu: "Färjan är på väg till Pettu 🚢",
+        state_pause: "Färjan har paus för föraren ☕",
+        state_unknown: "Okänd status / Vid kaj ⏳",
+        
+        state_at_pettu_sub: "Kör vid behov. Kör ombord när bommarna öppnas.",
+        state_at_uto_sub: "Ligger för tillfället vid kaj på Utö-sidan.",
+        state_to_uto_sub: "Beräknas anlända till Utö (Ulkoluoto) om {min} min.",
+        state_to_pettu_sub: "Beräknas anlända till Pettu om {min} min.",
+        state_pause_sub: "Förare på paus. Turer beräknas återupptas inom kort.",
+        state_unknown_sub: "Ingen aktiv tur rapporteras just nu. Kontrollera igen snart.",
+
+        serviceTitle: "Underhåll pågår / Service 🛠️",
+        serviceDesc: "Färjan är ur ordinarie drift för planerat underhåll eller teknisk kontroll. Trafiken är tillfälligt stoppad."
+      },
+      fi: {
+        titleHeader: "Pettu Lautta",
+        subtitleHeader: "Reaaliaikanäkymä matkustajille",
+        liveSyncActive: "Reaaliaikainen seuranta",
+        liveSyncSim: "Demotila aktiivinen",
+        speedometer: "Lautan nopeus",
+        speedStopped: "Laiturissa",
+        speedMoving: "Kulkee",
+        nextEta: "Arvioitu ETA",
+        destinationLabel: "Määränpää",
+        btnNavigation: "Avaa lauttaranta Google Maps -navigoinnissa",
+        demoTitle: "⚙️ Testipaneeli / Demotila",
+        demoSource: "Tietolähde",
+        demoDrift: "Käyttötila",
+        demoState: "Lautan tila",
+        demoSpeed: "Lautan nopeus",
+        demoEta: "ETA (minuutin päästä)",
+        footerNote: "Palvelun tarjoaa Firebase Realtime Database • Päivittyy automaattisesti",
+        
+        // Dynamic Status Headings
+        state_at_pettu: "Laiturissa Pettussa ⚓",
+        state_at_uto: "Laiturissa Ulkoluodossa ⚓",
+        state_to_uto: "Lautta on matkalla Ulkoluotoon 🚢",
+        state_to_pettu: "Lautta on matkalla Pettuun 🚢",
+        state_pause: "Lautalla on kuljettajan tauko ☕",
+        state_unknown: "Tila tuntematon / Laiturissa ⏳",
+        
+        state_at_pettu_sub: "Ajaa tarvittaessa. Aja alukseen puomien auettua.",
+        state_at_uto_sub: "Laiturissa parhaillaan Ulkoluodon puolella.",
+        state_to_uto_sub: "Arvioitu saapumisaika Ulkoluotoon {min} min päästä.",
+        state_to_pettu_sub: "Arvioitu saapumisaika Pettuun {min} min päästä.",
+        state_pause_sub: "Kuljettajan lakisääteinen tauko. Vuorot jatkuvat pian.",
+        state_unknown_sub: "Ei aktiivista vuoroa raportoitu. Tarkista uudelleen pian.",
+
+        serviceTitle: "Huolto käynnissä 🛠️",
+        serviceDesc: "Lautta on poissa käytöstä suunnitellun huollon tai teknisen tarkastuksen vuoksi."
+      }
+    };
+
+    // Keep UI Clock running
+    function updateClock() {
+      const now = new Date();
+      const pad = (num) => String(num).padStart(2, '0');
+      document.getElementById('current-clock').textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // Setup Firebase Listeners
+    if (hasFirebaseConnected) {
+      // Listen to driftstatus (normal/service)
+      onValue(ref(db, 'config/driftstatus'), (snapshot) => {
+        if (state.dataSource === 'real') {
+          const val = snapshot.val();
+          if (val) {
+            state.driftstatus = val;
+            document.getElementById('sim-drift-select').value = val;
+            renderApp();
+          }
+        }
+      });
+
+      // Listen to state / live-GPS speed
+      onValue(ref(db, 'config/avgSpeedKnots'), (snapshot) => {
+        if (state.dataSource === 'real') {
+          const val = snapshot.val();
+          if (val !== null) {
+            state.speed = parseFloat(val);
+            document.getElementById('sim-speed-slider').value = val;
+            document.getElementById('sim-speed-val').textContent = `${parseFloat(val).toFixed(1)} knop`;
+            renderApp();
+          }
+        }
+      });
+
+      // Listen to next/eta minutes
+      onValue(ref(db, 'turer/next/eta'), (snapshot) => {
+        if (state.dataSource === 'real') {
+          const val = snapshot.val();
+          if (val) {
+            // parse minutes or ISO timestamp
+            parseFirebaseEta(val);
+          }
+        }
+      });
+
+      // Listen to central state machine
+      onValue(ref(db, 'turer/current/state'), (snapshot) => {
+        if (state.dataSource === 'real') {
+          const val = snapshot.val();
+          if (val) {
+            // map firebase state to local state
+            state.ferryState = mapFirebaseState(val);
+            document.getElementById('sim-state-select').value = state.ferryState;
+            renderApp();
+          }
+        }
+      });
+    }
+
+    function parseFirebaseEta(val) {
+      if (typeof val === 'number') {
+        const diff = val - Date.now();
+        state.etaMinutes = Math.max(1, Math.round(diff / 60000));
+      } else if (typeof val === 'string') {
+        if (val.includes(':')) {
+          const [h, m] = val.split(':').map(Number);
+          const now = new Date();
+          const target = new Date();
+          target.setHours(h, m, 0, 0);
+          if (target.getTime() < now.getTime() - 10 * 60 * 1000) {
+            target.setDate(target.getDate() + 1);
+          }
+          state.etaMinutes = Math.max(1, Math.round((target.getTime() - now.getTime()) / 60000));
+        } else {
+          const parsed = Date.parse(val);
+          if (!isNaN(parsed)) {
+            state.etaMinutes = Math.max(1, Math.round((parsed - Date.now()) / 60000));
+          }
+        }
+      }
+      document.getElementById('sim-eta-slider').value = state.etaMinutes;
+      document.getElementById('sim-eta-val').textContent = `om ${state.etaMinutes} min`;
+      renderApp();
+    }
+
+    function mapFirebaseState(fbState) {
+      const s = String(fbState).toLowerCase();
+      if (s.includes('dock') || s.includes('kaj')) {
+        if (s.includes('uto') || s.includes('ulko')) return 'vid kaj utö';
+        return 'vid kaj pettu';
+      }
+      if (s.includes('moving') || s.includes('väg') || s.includes('way')) {
+        if (s.includes('uto') || s.includes('ulko')) return 'på väg till utö';
+        return 'på väg till pettu';
+      }
+      if (s.includes('pause') || s.includes('paus')) return 'paus';
+      return 'okänt';
+    }
+
+    // Main App Renderer
+    function renderApp() {
+      const banner = document.getElementById('service-banner');
+      const bannerTitle = document.getElementById('service-banner-title');
+      const bannerDesc = document.getElementById('service-banner-desc');
+      const card = document.getElementById('status-card');
+      const glow = document.getElementById('status-glow');
+      const syncText = document.getElementById('label-live-sync');
+      const syncPing = document.getElementById('sync-ping');
+      const syncDot = document.getElementById('sync-dot');
+
+      const headline = document.getElementById('status-headline');
+      const subline = document.getElementById('status-subline');
+      const speedValue = document.getElementById('speed-value');
+      const speedPulse = document.getElementById('speed-indicator-pulse');
+      const speedText = document.getElementById('speed-indicator-text');
+      const displayEta = document.getElementById('display-eta');
+      const displayDestination = document.getElementById('display-destination');
+
+      const lang = state.lang;
+      const t = translations[lang];
+
+      // Update sync source visual
+      if (state.dataSource === 'sim') {
+        syncText.textContent = t.liveSyncSim;
+        syncDot.className = "relative inline-flex rounded-full h-2 w-2 bg-amber-500";
+        syncPing.className = "absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75";
+      } else {
+        syncText.textContent = t.liveSyncActive;
+        syncDot.className = "relative inline-flex rounded-full h-2 w-2 bg-emerald-500";
+        syncPing.className = "animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75";
+      }
+
+      // 1. Service state rendering
+      if (state.driftstatus === 'service') {
+        banner.classList.remove('hidden');
+        bannerTitle.textContent = t.serviceTitle;
+        bannerDesc.textContent = t.serviceDesc;
+        
+        // Block main status card details with a service block
+        headline.textContent = t.serviceTitle;
+        headline.className = "text-xl font-extrabold tracking-tight text-amber-500";
+        subline.textContent = t.serviceDesc;
+        
+        displayEta.textContent = "--:--";
+        displayDestination.textContent = "--";
+        card.className = "bg-slate-900/60 rounded-3xl border border-amber-500/30 p-6 space-y-6 shadow-2xl relative overflow-hidden backdrop-blur-sm";
+        glow.className = "absolute -inset-10 opacity-10 blur-3xl rounded-full transition-all duration-500 bg-amber-500";
+        return;
+      } else {
+        banner.classList.add('hidden');
+        card.className = "bg-slate-900/60 rounded-3xl border border-slate-800/80 p-6 space-y-6 shadow-2xl relative overflow-hidden backdrop-blur-sm";
+      }
+
+      // 2. Speedometer mapping
+      const speed = state.speed;
+      speedValue.textContent = speed.toFixed(1);
+      if (speed < 0.5) {
+        speedText.textContent = t.speedStopped;
+        speedPulse.className = "h-2 w-2 rounded-full bg-slate-500";
+        speedText.className = "text-[11px] font-bold text-slate-400";
+      } else {
+        speedText.textContent = t.speedMoving;
+        speedPulse.className = "h-2 w-2 rounded-full bg-emerald-500 animate-ping";
+        speedText.className = "text-[11px] font-bold text-emerald-400";
+      }
+
+      // 3. Status State machine rendering
+      let destinationName = '';
+      let etaString = '--:--';
+      
+      const now = new Date();
+
+      switch (state.ferryState) {
+        case 'vid kaj pettu':
+          headline.textContent = t.state_at_pettu;
+          headline.className = "text-xl font-extrabold tracking-tight text-white leading-snug";
+          subline.textContent = t.state_at_pettu_sub;
+          destinationName = lang === 'sv' ? 'Utö (Ulkoluoto)' : 'Ulkoluoto';
+          etaString = lang === 'sv' ? 'Vid behov' : 'Tarvittaessa';
+          glow.className = "absolute -inset-10 opacity-5 blur-3xl rounded-full transition-all duration-500 bg-sky-500";
+          break;
+
+        case 'vid kaj utö':
+          headline.textContent = t.state_at_uto;
+          headline.className = "text-xl font-extrabold tracking-tight text-white leading-snug";
+          subline.textContent = t.state_at_uto_sub;
+          destinationName = lang === 'sv' ? 'Pettu' : 'Pettu';
+          etaString = lang === 'sv' ? 'Vid behov' : 'Tarvittaessa';
+          glow.className = "absolute -inset-10 opacity-5 blur-3xl rounded-full transition-all duration-500 bg-teal-500";
+          break;
+
+        case 'på väg till utö':
+          headline.textContent = t.state_to_uto;
+          headline.className = "text-xl font-extrabold tracking-tight text-emerald-400 leading-snug";
+          subline.textContent = t.state_to_uto_sub.replace('{min}', state.etaMinutes);
+          destinationName = lang === 'sv' ? 'Utö (Ulkoluoto)' : 'Ulkoluoto';
+          
+          const etaDateUto = new Date(now.getTime() + state.etaMinutes * 60000);
+          etaString = `${String(etaDateUto.getHours()).padStart(2, '0')}:${String(etaDateUto.getMinutes()).padStart(2, '0')}`;
+          glow.className = "absolute -inset-10 opacity-20 blur-3xl rounded-full transition-all duration-500 bg-emerald-500";
+          break;
+
+        case 'på väg till pettu':
+          headline.textContent = t.state_to_pettu;
+          headline.className = "text-xl font-extrabold tracking-tight text-emerald-400 leading-snug";
+          subline.textContent = t.state_to_pettu_sub.replace('{min}', state.etaMinutes);
+          destinationName = 'Pettu';
+          
+          const etaDatePettu = new Date(now.getTime() + state.etaMinutes * 60000);
+          etaString = `${String(etaDatePettu.getHours()).padStart(2, '0')}:${String(etaDatePettu.getMinutes()).padStart(2, '0')}`;
+          glow.className = "absolute -inset-10 opacity-20 blur-3xl rounded-full transition-all duration-500 bg-emerald-500";
+          break;
+
+        case 'paus':
+          headline.textContent = t.state_pause;
+          headline.className = "text-xl font-extrabold tracking-tight text-amber-400 leading-snug";
+          subline.textContent = t.state_pause_sub;
+          destinationName = '--';
+          etaString = '--:--';
+          glow.className = "absolute -inset-10 opacity-10 blur-3xl rounded-full transition-all duration-500 bg-amber-500";
+          break;
+
+        default:
+          headline.textContent = t.state_unknown;
+          headline.className = "text-xl font-extrabold tracking-tight text-slate-300 leading-snug";
+          subline.textContent = t.state_unknown_sub;
+          destinationName = '--';
+          etaString = '--:--';
+          glow.className = "absolute -inset-10 opacity-5 blur-3xl rounded-full transition-all duration-500 bg-slate-500";
+      }
+
+      displayDestination.textContent = destinationName;
+      displayEta.textContent = etaString;
+    }
+
+    // Set Language handler
+    window.setLanguage = function(lang) {
+      state.lang = lang;
+      localStorage.setItem('pettu_lang', lang);
+
+      // Toggle Active Buttons Styles
+      document.getElementById('lang-btn-sv').className = lang === 'sv' 
+        ? "px-2.5 py-1 text-[11px] font-bold rounded-full transition-all duration-200 flex items-center gap-1 bg-sky-600 text-white shadow-sm"
+        : "px-2.5 py-1 text-[11px] font-bold rounded-full transition-all duration-200 flex items-center gap-1 text-slate-400 hover:text-white";
+      
+      document.getElementById('lang-btn-fi').className = lang === 'fi' 
+        ? "px-2.5 py-1 text-[11px] font-bold rounded-full transition-all duration-200 flex items-center gap-1 bg-sky-600 text-white shadow-sm"
+        : "px-2.5 py-1 text-[11px] font-bold rounded-full transition-all duration-200 flex items-center gap-1 text-slate-400 hover:text-white";
+
+      // Translate static labels
+      document.getElementById('app-title-header').textContent = translations[lang].titleHeader;
+      document.getElementById('app-subtitle-header').textContent = translations[lang].subtitleHeader;
+      document.getElementById('label-speedometer').textContent = translations[lang].speedometer;
+      document.getElementById('label-next-eta').textContent = translations[lang].nextEta;
+      document.getElementById('label-destination').textContent = translations[lang].destinationLabel;
+      document.getElementById('label-btn-navigation').textContent = translations[lang].btnNavigation;
+      document.getElementById('label-demo-title').textContent = translations[lang].demoTitle;
+      document.getElementById('label-demo-source').textContent = translations[lang].demoSource;
+      document.getElementById('label-demo-drift').textContent = translations[lang].demoDrift;
+      document.getElementById('label-demo-state').textContent = translations[lang].demoState;
+      document.getElementById('label-demo-speed').textContent = translations[lang].demoSpeed;
+      document.getElementById('label-demo-eta').textContent = translations[lang].demoEta;
+      document.getElementById('label-footer-note').textContent = translations[lang].footerNote;
+
+      renderApp();
+    }
+
+    // Demo Mode Helpers
+    window.toggleDemoPanel = function() {
+      const content = document.getElementById('demo-content');
+      const caret = document.getElementById('demo-caret');
+      content.classList.toggle('hidden');
+      caret.classList.toggle('rotate-180');
+    }
+
+    window.setDataSource = function(src) {
+      state.dataSource = src;
+      const realBtn = document.getElementById('source-btn-real');
+      const simBtn = document.getElementById('source-btn-sim');
+
+      if (src === 'sim') {
+        simBtn.className = "px-2.5 py-1 rounded-md text-[10px] font-bold bg-sky-600 text-white shadow-sm transition";
+        realBtn.className = "px-2.5 py-1 rounded-md text-[10px] font-bold text-slate-400 hover:text-white transition";
+        document.getElementById('simulated-controls').classList.remove('opacity-40', 'pointer-events-none');
+      } else {
+        realBtn.className = "px-2.5 py-1 rounded-md text-[10px] font-bold bg-sky-600 text-white shadow-sm transition";
+        simBtn.className = "px-2.5 py-1 rounded-md text-[10px] font-bold text-slate-400 hover:text-white transition";
+        document.getElementById('simulated-controls').classList.add('opacity-40', 'pointer-events-none');
+        
+        if (!hasFirebaseConnected) {
+          alert("Firebase is not connected. Plase configuration check inside firebaseConfig inside passagerare.html");
+          setDataSource('sim');
+        }
+      }
+      renderApp();
+    }
+
+    window.handleSimDriftChange = function(val) {
+      state.driftstatus = val;
+      renderApp();
+    }
+
+    window.handleSimStateChange = function(val) {
+      state.ferryState = val;
+      // sync speed default based on state
+      if (val.startsWith('vid kaj') || val === 'paus' || val === 'okänt') {
+        state.speed = 0.0;
+        document.getElementById('sim-speed-slider').value = 0;
+        document.getElementById('sim-speed-val').textContent = "0.0 knop";
+      } else {
+        state.speed = 10.5;
+        document.getElementById('sim-speed-slider').value = 10.5;
+        document.getElementById('sim-speed-val').textContent = "10.5 knop";
+      }
+      renderApp();
+    }
+
+    window.handleSimSpeedSlider = function(val) {
+      state.speed = parseFloat(val);
+      document.getElementById('sim-speed-val').textContent = `${state.speed.toFixed(1)} knop`;
+      renderApp();
+    }
+
+    window.handleSimEtaSlider = function(val) {
+      state.etaMinutes = parseInt(val);
+      document.getElementById('sim-eta-val').textContent = `om ${val} min`;
+      renderApp();
+    }
+
+    // Initial Trigger Setup
+    setLanguage(state.lang);
+    lucide.createIcons();
+
+  </script>
+</body>
+</html>
 

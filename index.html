@@ -1,9 +1,10 @@
 <!DOCTYPE html>
+<!-- VERSION: 1.3 -->
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status</title>
+  <title>Pettu Färja - Live-status (v1.3)</title>
   
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
@@ -68,9 +69,10 @@
 
   </main>
 
-  <!-- FOOTER: Info -->
-  <footer class="w-full max-w-md mx-auto text-center pb-4">
+  <!-- FOOTER: Info & Version -->
+  <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live från Pettu-linjen</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v1.3</p>
   </footer>
 
   <script>
@@ -119,7 +121,7 @@
       appId: "1:260033893182:web:328da94483ad4b245f926f"
     };
 
-    // Initiera
+    // Initiera Firebase
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
@@ -134,10 +136,12 @@
       }
     });
 
-    // Lyssna på den aktuella turen
-    db.ref('turer/aktuell').on('value', snapshot => {
-      const data = snapshot.val() || {};
-      updateUI(data);
+    // Lyssna på den aktuella turen (Hämtar senaste inlägget i listan)
+    db.ref('turer/aktuell').orderByKey().limitToLast(1).on('value', snapshot => {
+      snapshot.forEach(childSnapshot => {
+        const data = childSnapshot.val() || {};
+        updateUI(data);
+      });
     });
 
     function updateUI(data) {
@@ -155,7 +159,6 @@
       speedBar.style.width = `${percentage}%`;
 
       // 2. Tolka plats utifrån fältet "from"
-      // Vi standardiserar texten så att både "Utö" och "Ulkoluoto" matchar rätt
       const fromLocation = (data.from || "").toLowerCase();
       const isMoving = speed > 0.5;
 
@@ -196,8 +199,11 @@
       document.getElementById('serviceTitle').innerText = lang.serviceTitle;
       document.getElementById('serviceDesc').innerText = lang.serviceDesc;
       
-      firebase.database().ref('turer/aktuell').once('value', snapshot => {
-        if(snapshot.exists()) updateUI(snapshot.val());
+      // Ladda om data för att byta språk på statustexten om den redan finns laddad
+      firebase.database().ref('turer/aktuell').orderByKey().limitToLast(1).once('value', snapshot => {
+        snapshot.forEach(childSnapshot => {
+          updateUI(childSnapshot.val());
+        });
       });
     }
 

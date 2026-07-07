@@ -1,19 +1,3 @@
-Absolut! Det är en jättebra idé, och eftersom Meteorologiska institutet (FMI) erbjuder helt öppen data kan vi plocka havsvattenståndet direkt från dem utan att behöva skapa konton eller blanda in appen på färjan.
-
-FMI har mätstationer (mareografer) utplacerade i skärgården. För Pettu är stationen i Åbo (Turku) eller Hangö (Hanko) de mest relevanta. I koden nedan har jag kopplat webbsidan mot Åbo-mareografen.
-
-När webbsidan uppdaterar vädret från Open-Meteo, gör den numera samtidigt ett separat anrop till FMI, läser av deras XML-data, plockar ut det absolut färskaste mätvärdet (som anges i millimeter), omvandlar det till centimeter och lägger till ett snyggt plus eller minus framför!
-
-Här är **v2.10** där både väder och vattenstånd hämtas automatiskt.
-
-### 📋 Changelog
-
-* **Version:** 2.10
-* **Ändringar:** Implementerade live-hämtning av havsvattenstånd via FMI:s (Ilmatieteen laitos) öppna WFS-API. Datan hämtas från Åbo mätstation, konverteras från mm till cm och visas i den tidigare förberedda rutan. Både väder och vattenstånd uppdateras nu synkroniserat var 30:e minut.
-
-Kopiera och ersätt hela din `index.html`:
-
-```html
 <!DOCTYPE html>
 <!-- 
 =====================================================
@@ -341,5 +325,3 @@ v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
   </script>
 </body>
 </html>
-
-```

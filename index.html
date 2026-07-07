@@ -1,23 +1,9 @@
 <!DOCTYPE html>
-<!-- 
-=====================================================
-📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
-=====================================================
-v2.0 - Tog bort timeout för stillaliggande färja. Visar alltid sista kajplats oavsett tid. Offline triggas bara vid signalbortfall under färd.
-v1.9 - Smart inaktivitet: 10 min timeout om färjan kör, 4 timmar om den ligger vid kaj.
-v1.8 - Inaktivitetsskydd: Känner av om plattan är avstängd.
-v1.7 - Lade till dolda changeloggen.
-v1.6 - Fixade split-data-problemet (5 senaste inläggen slås ihop).
-v1.5 - Implementerade dynamisk datum-mapp (ÅÅÅÅ-MM-DD).
-v1.3/1.4 - Felsökning och logik för kajplats från "from".
-v1.0 - Första rena passagerarvyn.
-=====================================================
--->
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.0)</title>
+  <title>Pettu Färja - Live-status (v2.1)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -32,7 +18,7 @@ v1.0 - Första rena passagerarvyn.
     .font-mono-tabular { font-family: 'JetBrains+Mono', monospace; font-variant-numeric: tabular-nums; }
   </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between p-4">
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between p-4 selection:bg-teal-500 selection:text-slate-950">
 
   <header class="flex justify-between items-center w-full max-w-md mx-auto pt-2">
     <div class="flex items-center space-x-2">
@@ -44,13 +30,13 @@ v1.0 - Första rena passagerarvyn.
     </button>
   </header>
 
-  <main class="w-full max-w-md mx-auto flex-1 flex flex-col justify-center items-center my-8 space-y-8">
+  <main class="w-full max-w-md mx-auto flex-1 flex flex-col justify-center items-center my-8 space-y-6">
     <div id="serviceBanner" class="hidden w-full bg-amber-500/10 border border-amber-500/30 text-amber-400 p-4 rounded-2xl text-center space-y-1">
       <p class="font-bold text-lg" id="serviceTitle">🛠️ Service pågår</p>
       <p class="text-sm opacity-90" id="serviceDesc">Färjan är för tillfället ur ordinarie drift.</p>
     </div>
 
-    <div class="w-full text-center space-y-2">
+    <div class="w-full text-center space-y-2 mb-4">
       <h1 id="statusText" class="text-3xl font-bold tracking-tight text-white px-4">Ansluter...</h1>
       <p id="subStatusText" class="text-slate-400 text-base"></p>
     </div>
@@ -65,14 +51,28 @@ v1.0 - Första rena passagerarvyn.
         <div id="speedBar" class="bg-emerald-500 h-full w-0 transition-all duration-500"></div>
       </div>
     </div>
+
+    <div class="bg-slate-800/30 border border-slate-800/80 p-5 rounded-3xl w-full flex justify-between items-center shadow-lg backdrop-blur-sm">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-slate-700/50 rounded-xl text-slate-300">
+          <i data-lucide="car" class="w-5 h-5"></i>
+        </div>
+        <span class="text-sm uppercase tracking-wider font-semibold text-slate-300" id="vehiclesLabel">Dagens fordon</span>
+      </div>
+      <span class="text-2xl font-bold font-mono-tabular text-white" id="vehiclesCount">-</span>
+    </div>
+
   </main>
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.0</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.1</p>
   </footer>
 
   <script>
+    // Aktivera Lucide Ikoner
+    lucide.createIcons();
+
     const i18n = {
       sv: { 
         speed: "Aktuell hastighet", 
@@ -87,7 +87,8 @@ v1.0 - Första rena passagerarvyn.
         idle: "Ligger stilla", 
         noData: "Väntar på data... ☕",
         offline: "Offline 📡",
-        offlineDesc: "Systemet är avstängt eller saknar täckning"
+        offlineDesc: "Systemet är avstängt eller saknar täckning",
+        vehicles: "Dagens fordon"
       },
       fi: { 
         speed: "Nykyinen nopeus", 
@@ -102,13 +103,17 @@ v1.0 - Första rena passagerarvyn.
         idle: "Paikallaan", 
         noData: "Odotetaan dataa... ☕",
         offline: "Offline 📡",
-        offlineDesc: "Järjestelmä on sammutettu tai ei verkkoa"
+        offlineDesc: "Järjestelmä on sammutettu tai ei verkkoa",
+        vehicles: "Ajoneuvoja tänään"
       }
     };
 
     let currentLang = localStorage.getItem('pettu_lang') || 'sv';
     const today = new Date();
-    const dbPath = `turer/${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`; 
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    const dbPathTurer = `turer/${todayStr}`; 
+    const dbPathLogs = `days/${todayStr}/logs`;
 
     firebase.initializeApp({
       apiKey: "AIzaSyDregBlw1hjcHotJAk8938xXAjQKbHXS1Q",
@@ -122,8 +127,24 @@ v1.0 - Första rena passagerarvyn.
 
     const db = firebase.database();
 
-    // Pussel-logik: Hämta 5 senaste, kombinera data
-    db.ref(dbPath).orderByKey().limitToLast(5).on('value', snapshot => {
+    // 1. Lyssna på fordonsloggar
+    db.ref(dbPathLogs).on('value', snapshot => {
+      let totalVehicles = 0;
+      if (snapshot.exists()) {
+        snapshot.forEach(child => {
+          const val = child.val();
+          if (val.delta) {
+            totalVehicles += val.delta;
+          }
+        });
+        document.getElementById('vehiclesCount').innerText = totalVehicles;
+      } else {
+        document.getElementById('vehiclesCount').innerText = "0";
+      }
+    });
+
+    // 2. Lyssna på turer (Pussel-logik)
+    db.ref(dbPathTurer).orderByKey().limitToLast(5).on('value', snapshot => {
       let latestSpeed = 0;
       let latestFrom = "";
       let latestTs = 0;
@@ -150,9 +171,6 @@ v1.0 - Första rena passagerarvyn.
       const isMoving = speed > 0.5;
       
       const nowMs = Date.now();
-      
-      // SMART INAKTIVITET v2: Offline triggas BARA om signalen bryts under färd (>0.5 knop) i mer än 10 min.
-      // Ligger den stilla (<0.5 knop) går den aldrig offline utan visar lugnt sista kända kaj.
       const isOffline = isMoving && data.ts > 0 && (nowMs - data.ts > 600000);
 
       if (isOffline) {
@@ -194,6 +212,7 @@ v1.0 - Första rena passagerarvyn.
       const lang = i18n[currentLang];
       document.getElementById('langBtn').innerText = currentLang === 'sv' ? '🇸🇪 SV' : '🇫🇮 FI';
       document.getElementById('speedLabel').innerText = lang.speed;
+      document.getElementById('vehiclesLabel').innerText = lang.vehicles;
     }
 
     function toggleLanguage() {

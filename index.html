@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.1)</title>
+  <title>Pettu Färja - Live-status (v2.2)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -61,50 +61,30 @@
       </div>
       <span class="text-2xl font-bold font-mono-tabular text-white" id="vehiclesCount">-</span>
     </div>
-
   </main>
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.1</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.2</p>
   </footer>
 
   <script>
-    // Aktivera Lucide Ikoner
     lucide.createIcons();
 
     const i18n = {
       sv: { 
-        speed: "Aktuell hastighet", 
-        serviceTitle: "🛠️ Service pågår", 
-        serviceDesc: "Färjan är ur drift.", 
-        liveText: "Senaste signal från färjan", 
-        atDockPettu: "Ligger vid kaj i Pettu ⚓", 
-        atDockUto: "Ligger vid kaj i Ulkoluoto ⚓", 
-        enRouteFromPettu: "Har avgått från Pettu 🚢", 
-        enRouteFromUto: "Har avgått från Ulkoluoto 🚢", 
-        moving: "Rör på sig", 
-        idle: "Ligger stilla", 
-        noData: "Väntar på data... ☕",
-        offline: "Offline 📡",
-        offlineDesc: "Systemet är avstängt eller saknar täckning",
-        vehicles: "Dagens fordon"
+        speed: "Aktuell hastighet", serviceTitle: "🛠️ Service pågår", serviceDesc: "Färjan är ur drift.", 
+        liveText: "Senaste signal från färjan", atDockPettu: "Ligger vid kaj i Pettu ⚓", 
+        atDockUto: "Ligger vid kaj i Ulkoluoto ⚓", enRouteFromPettu: "Har avgått från Pettu 🚢", 
+        enRouteFromUto: "Har avgått från Ulkoluoto 🚢", moving: "Rör på sig", idle: "Ligger stilla", 
+        noData: "Väntar på data... ☕", offline: "Offline 📡", offlineDesc: "Signalen har brutits", vehicles: "Dagens fordon"
       },
       fi: { 
-        speed: "Nykyinen nopeus", 
-        serviceTitle: "🛠️ Huolto käynnissä", 
-        serviceDesc: "Lossi ei ole liikenteessä.", 
-        liveText: "Viimeisin signaali lossilta", 
-        atDockPettu: "Lossi on laiturissa Petussa ⚓", 
-        atDockUto: "Lossi on laiturissa Ulkoluodossa ⚓", 
-        enRouteFromPettu: "Lähtenyt Petusta 🚢", 
-        enRouteFromUto: "Lähtenyt Ulkoluodosta 🚢", 
-        moving: "Liikkeessä", 
-        idle: "Paikallaan", 
-        noData: "Odotetaan dataa... ☕",
-        offline: "Offline 📡",
-        offlineDesc: "Järjestelmä on sammutettu tai ei verkkoa",
-        vehicles: "Ajoneuvoja tänään"
+        speed: "Nykyinen nopeus", serviceTitle: "🛠️ Huolto käynnissä", serviceDesc: "Lossi ei ole liikenteessä.", 
+        liveText: "Viimeisin signaali lossilta", atDockPettu: "Lossi on laiturissa Petussa ⚓", 
+        atDockUto: "Lossi on laiturissa Ulkoluodossa ⚓", enRouteFromPettu: "Lähtenyt Petusta 🚢", 
+        enRouteFromUto: "Lähtenyt Ulkoluodosta 🚢", moving: "Liikkeessä", idle: "Paikallaan", 
+        noData: "Odotetaan dataa... ☕", offline: "Offline 📡", offlineDesc: "Signaali katkesi", vehicles: "Ajoneuvoja tänään"
       }
     };
 
@@ -126,16 +106,16 @@
     });
 
     const db = firebase.database();
+    
+    // Sparar undan senaste datan så den inbyggda timern kan kolla den
+    let lastKnownData = { avgSpeedKnots: 0, from: "", ts: 0 };
 
-    // 1. Lyssna på fordonsloggar
     db.ref(dbPathLogs).on('value', snapshot => {
       let totalVehicles = 0;
       if (snapshot.exists()) {
         snapshot.forEach(child => {
           const val = child.val();
-          if (val.delta) {
-            totalVehicles += val.delta;
-          }
+          if (val.delta) totalVehicles += val.delta;
         });
         document.getElementById('vehiclesCount').innerText = totalVehicles;
       } else {
@@ -143,7 +123,6 @@
       }
     });
 
-    // 2. Lyssna på turer (Pussel-logik)
     db.ref(dbPathTurer).orderByKey().limitToLast(5).on('value', snapshot => {
       let latestSpeed = 0;
       let latestFrom = "";
@@ -156,8 +135,16 @@
         if (val.ts !== undefined && val.ts > latestTs) latestTs = val.ts;
       });
 
-      updateUI({ avgSpeedKnots: latestSpeed, from: latestFrom, ts: latestTs });
+      lastKnownData = { avgSpeedKnots: latestSpeed, from: latestFrom, ts: latestTs };
+      updateUI(lastKnownData);
     });
+
+    // TICKANDE KLOCKA: Tvingar uppdatering av UI var 5:e sekund för att se om Offline-gränsen passerats
+    setInterval(() => {
+      if (lastKnownData.ts > 0) {
+        updateUI(lastKnownData);
+      }
+    }, 5000);
 
     function updateUI(data) {
       const textEl = document.getElementById('statusText'), 
@@ -171,7 +158,7 @@
       const isMoving = speed > 0.5;
       
       const nowMs = Date.now();
-      const isOffline = isMoving && data.ts > 0 && (nowMs - data.ts > 600000);
+      const isOffline = isMoving && data.ts > 0 && (nowMs - data.ts > 600000); // 10 min
 
       if (isOffline) {
         speedBar.className = "bg-slate-700 h-full transition-all duration-500";
@@ -198,12 +185,9 @@
         }
       }
       
-      let timeString = "";
-      if (data.ts > 0) {
-        timeString = new Date(data.ts).toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      } else {
-        timeString = new Date().toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      }
+      let timeString = data.ts > 0 
+        ? new Date(data.ts).toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
+        : new Date().toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       
       document.getElementById('updateTime').innerText = `${lang.liveText} • ${timeString}`;
     }
@@ -213,6 +197,7 @@
       document.getElementById('langBtn').innerText = currentLang === 'sv' ? '🇸🇪 SV' : '🇫🇮 FI';
       document.getElementById('speedLabel').innerText = lang.speed;
       document.getElementById('vehiclesLabel').innerText = lang.vehicles;
+      if (lastKnownData.ts > 0) updateUI(lastKnownData);
     }
 
     function toggleLanguage() {

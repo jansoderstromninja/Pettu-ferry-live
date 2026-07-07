@@ -3,21 +3,20 @@
 =====================================================
 📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
 =====================================================
+v2.18 - Bytte ut kart-emojin mot professionell AIS-markör (cirkel vid kaj, roterande pil vid färd).
+v2.17 - Ersatte "Mot"-texten med en visuell grön pil (Pettu ➔ Ulkoluoto) i rubriken.
+v2.16 - Ändrade huvudrubrik under färd till destination.
 v2.15 - Maxade kontrast och färgmättnad i kartfiltret för knivskarp skärgårds-vy.
 v2.14 - Bytte till OpenStreetMap med CSS-invertering.
 v2.13 - Lade till live-karta med Leaflet.js.
 v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
-v2.11 - Lade till +/-, byvindar.
-v2.10 - Lade till live-vattenstånd via FMI.
-v2.9 - Lade till live-väder via Open-Meteo API.
-v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
 =====================================================
 -->
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.15)</title>
+  <title>Pettu Färja - Live-status (v2.18)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -37,20 +36,14 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
     body { font-family: 'Inter', sans-serif; }
     .font-mono-tabular { font-family: 'JetBrains+Mono', monospace; font-variant-numeric: tabular-nums; }
     
-    /* Kartans container */
     .leaflet-container { background: #0f172a; z-index: 10; font-family: 'Inter', sans-serif; }
     .leaflet-control-attribution { background: rgba(15, 23, 42, 0.7) !important; color: #94a3b8 !important; }
     .leaflet-control-attribution a { color: #38bdf8 !important; }
     
-    /* 
-      MAGISKT CSS-FILTER: Högkontrast Dark Mode 
-      Inverterar färgerna, snurrar tillbaka nyanserna och maxar kontrast/mättnad
-    */
+    /* CSS-filter för högkontrast Dark Mode */
     .leaflet-tile {
       filter: invert(100%) hue-rotate(180deg) brightness(105%) contrast(150%) saturate(150%);
     }
-    
-    .ferry-marker { font-size: 24px; text-shadow: 0 2px 10px rgba(0,0,0,0.5); text-align: center; line-height: 30px; }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between p-4 selection:bg-teal-500 selection:text-slate-950">
@@ -102,12 +95,10 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
 
     <!-- Väder & Vattenstånd -->
     <div class="bg-slate-800/30 border border-slate-800/80 p-4 rounded-3xl w-full flex justify-around items-center shadow-lg backdrop-blur-sm">
-      <!-- Temperatur -->
       <div class="flex flex-col items-center space-y-1">
         <i data-lucide="thermometer" class="w-5 h-5 text-slate-400"></i>
         <span class="text-sm font-semibold text-white font-mono-tabular" id="weatherTemp">--°C</span>
       </div>
-      <!-- Vind -->
       <div class="flex flex-col items-center space-y-1">
         <i data-lucide="wind" class="w-5 h-5 text-slate-400"></i>
         <div class="flex items-center text-sm font-semibold text-white font-mono-tabular">
@@ -118,7 +109,6 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
           </svg>
         </div>
       </div>
-      <!-- Vattenstånd (FMI) -->
       <div class="flex flex-col items-center space-y-1">
         <i data-lucide="waves" class="w-5 h-5 text-slate-400"></i>
         <span class="text-sm font-semibold text-white font-mono-tabular" id="waterLevel">-- cm</span>
@@ -134,7 +124,7 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.15</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.18</p>
   </footer>
 
   <script>
@@ -144,15 +134,17 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
       sv: { 
         speed: "Aktuell hastighet", serviceTitle: "🛠️ Service pågår", serviceDesc: "Färjan är ur drift.", 
         liveText: "Senaste signal från färjan", atDockPettu: "Ligger vid kaj i Pettu ⚓", 
-        atDockUto: "Ligger vid kaj i Ulkoluoto ⚓", enRouteFromPettu: "Avgick från Pettu", 
-        enRouteFromUto: "Avgick från Ulkoluoto", moving: "Rör på sig", idle: "Ligger stilla", 
+        atDockUto: "Ligger vid kaj i Ulkoluoto ⚓", 
+        departedPrefix: "Avgick", 
+        moving: "Rör på sig", idle: "Ligger stilla", 
         noData: "Väntar på data... ☕", offline: "Offline 📡", offlineDesc: "Signalen har brutits", vehicles: "Dagens fordon"
       },
       fi: { 
         speed: "Nykyinen nopeus", serviceTitle: "🛠️ Huolto käynnissä", serviceDesc: "Lossi ei ole liikenteessä.", 
         liveText: "Viimeisin signaali lossilta", atDockPettu: "Lossi on laiturissa Petussa ⚓", 
-        atDockUto: "Lossi on laiturissa Ulkoluodossa ⚓", enRouteFromPettu: "Lähti Petusta", 
-        enRouteFromUto: "Lähti Ulkoluodosta", moving: "Liikkeessä", idle: "Paikallaan", 
+        atDockUto: "Lossi on laiturissa Ulkoluodossa ⚓", 
+        departedPrefix: "Lähti", 
+        moving: "Liikkeessä", idle: "Paikallaan", 
         noData: "Odotetaan dataa... ☕", offline: "Offline 📡", offlineDesc: "Signaali katkesi", vehicles: "Ajoneuvoja tänään"
       }
     };
@@ -185,7 +177,8 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
       breadTs: 0,
       breadSpeedKnots: 0,
       breadLat: null,
-      breadLng: null
+      breadLng: null,
+      heading: 0 // Ny variabel för att spara färdriktning i grader
     };
 
     // --- LEAFLET KARTA INIT ---
@@ -193,20 +186,20 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
     function initMap() {
       map = L.map('map', { zoomControl: false, dragging: false, scrollWheelZoom: false }).setView([60.0385, 22.9227], 14);
       
-      // OpenStreetMap Tiles (Filtreras med CSS ovan för högkontrast)
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap',
         maxZoom: 19
       }).addTo(map);
 
-      const ferryIcon = L.divIcon({
-        html: '<div class="ferry-marker">🚢</div>',
+      // Skapa en initial punkt-markör
+      const dotIcon = L.divIcon({
+        html: '<div style="width: 14px; height: 14px; background-color: #10b981; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px rgba(16,185,129,0.8);"></div>',
         className: '',
-        iconSize: [30, 30],
-        iconAnchor: [15, 15]
+        iconSize: [14, 14],
+        iconAnchor: [7, 7]
       });
 
-      ferryMarker = L.marker([60.0385, 22.9227], {icon: ferryIcon}).addTo(map);
+      ferryMarker = L.marker([60.0385, 22.9227], {icon: dotIcon}).addTo(map);
     }
     initMap();
 
@@ -301,8 +294,22 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
         const val = child.val();
         state.breadTs = val.ts || 0;
         state.breadSpeedKnots = (val.speed || 0) * 1.94384; 
-        state.breadLat = val.lat || null;  
-        state.breadLng = val.lng || null;  
+        
+        const newLat = val.lat || null;
+        const newLng = val.lng || null;
+
+        // Räkna ut riktningen (heading) om vi rört oss till en ny punkt
+        if (state.breadLat && state.breadLng && newLat && newLng && (state.breadLat !== newLat || state.breadLng !== newLng)) {
+           const lat1 = state.breadLat * Math.PI / 180;
+           const lat2 = newLat * Math.PI / 180;
+           const dLng = (newLng - state.breadLng) * Math.PI / 180;
+           const y = Math.sin(dLng) * Math.cos(lat2);
+           const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+           state.heading = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+        }
+
+        state.breadLat = newLat;  
+        state.breadLng = newLng;  
       });
       evaluateAndRender();
     });
@@ -338,46 +345,70 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
       const nowMs = Date.now();
       const isOffline = isMoving && (nowMs - data.ts > 600000); 
 
-      // --- Uppdatera kartan ---
+      // --- Uppdatera kartan (Punkt eller Pil) ---
       if (state.breadLat && state.breadLng && ferryMarker) {
+        
+        // Punkt-ikonen
+        const dotIcon = L.divIcon({
+          html: '<div style="width: 14px; height: 14px; background-color: #10b981; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px rgba(16,185,129,0.8);"></div>',
+          className: '', iconSize: [14, 14], iconAnchor: [7, 7]
+        });
+
+        // Pil-ikonen (Roterad enligt kurs)
+        const arrowIcon = L.divIcon({
+          html: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#10b981" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(${state.heading}deg); filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5));"><polygon points="12 2 19 21 12 17 5 21 12 2"></polygon></svg>`,
+          className: '', iconSize: [24, 24], iconAnchor: [12, 12]
+        });
+
         ferryMarker.setLatLng([state.breadLat, state.breadLng]);
+        
         if(isMoving) {
+          ferryMarker.setIcon(arrowIcon);
           map.panTo([state.breadLat, state.breadLng], { animate: true, duration: 1 });
+        } else {
+          ferryMarker.setIcon(dotIcon);
         }
       }
 
       let turerTimeStr = new Date(state.turerTs).toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit' });
       let timePrefix = currentLang === 'sv' ? 'kl.' : 'klo';
+      const routeArrow = `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="inline mx-1 text-emerald-400 align-text-bottom"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>`;
 
       if (isOffline) {
         speedBar.className = "bg-slate-700 h-full transition-all duration-500";
         speedBar.style.width = "0%";
         speedEl.innerText = "-.-";
         subEl.innerText = lang.offlineDesc;
-        textEl.innerText = lang.offline;
+        textEl.innerHTML = lang.offline;
       } else {
         speedEl.innerText = displaySpeed;
         speedBar.style.width = `${Math.min((parseFloat(displaySpeed) / 12) * 100, 100)}%`;
 
         if (isMoving) {
           speedBar.className = "bg-emerald-500 h-full transition-all duration-500";
-          subEl.innerText = `${lang.moving} (${displaySpeed} kn)`;
           
-          if (fromLoc.includes("pettu")) textEl.innerText = `${lang.enRouteFromPettu} ${timePrefix} ${turerTimeStr} 🚢`;
-          else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) textEl.innerText = `${lang.enRouteFromUto} ${timePrefix} ${turerTimeStr} 🚢`;
-          else textEl.innerText = `${lang.moving} 🚢`;
+          if (fromLoc.includes("pettu")) {
+            textEl.innerHTML = `Pettu ${routeArrow} Ulkoluoto 🚢`;
+          } else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) {
+            textEl.innerHTML = `Ulkoluoto ${routeArrow} Pettu 🚢`;
+          } else {
+            textEl.innerHTML = `${lang.moving} 🚢`;
+          }
+
+          subEl.innerText = `${lang.moving} (${displaySpeed} kn) • ${lang.departedPrefix} ${timePrefix} ${turerTimeStr}`;
+          
         } else {
           speedBar.className = "bg-slate-600 h-full transition-all duration-500";
           subEl.innerText = lang.idle;
           
           if (fromLoc.includes("pettu")) {
-            textEl.innerText = lang.atDockUto; 
+            textEl.innerHTML = lang.atDockUto; 
           }
           else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) {
-            textEl.innerText = lang.atDockPettu; 
+            textEl.innerHTML = lang.atDockPettu; 
           }
           else {
-            textEl.innerText = `${lang.idle} ⚓`;
+            textEl.innerHTML = `${lang.idle} ⚓`;
           }
         }
       }

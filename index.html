@@ -3,9 +3,9 @@
 =====================================================
 📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
 =====================================================
-v2.7 - Tog bort pendel-logiken. Litar på db igen eftersom Android-appen nu loggar ankomst korrekt.
+v2.8 - Återinförde Pendel-logiken! turer-noden sparar bara avgångar, så UI måste flippa platsen vid ankomst.
+v2.7 - (BORTTAGEN) Tog bort pendel-logiken.
 v2.6 - Lade till exakt avgångstid i rubriken när färjan är i rörelse.
-v2.5 - (BORTTAGEN) Pendel-logik.
 v2.4 - Lade till brusfilter för GPS-drift.
 v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
 =====================================================
@@ -14,7 +14,7 @@ v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.7)</title>
+  <title>Pettu Färja - Live-status (v2.8)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -79,7 +79,7 @@ v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.7</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.8</p>
   </footer>
 
   <script>
@@ -221,12 +221,12 @@ v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
           speedBar.className = "bg-slate-600 h-full transition-all duration-500";
           subEl.innerText = lang.idle;
           
-          // Android-appen uppdaterar nu databasen korrekt! Vi litar på 'from' rakt av igen.
+          // PENDEL-LOGIK TILLBAKA! Eftersom databasen bara loggar avgångar, måste vi vända på platsen vid ankomst.
           if (fromLoc.includes("pettu")) {
-            textEl.innerText = lang.atDockPettu; 
+            textEl.innerText = lang.atDockUto; // Vänd till Ulkoluoto
           }
           else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) {
-            textEl.innerText = lang.atDockUto; 
+            textEl.innerText = lang.atDockPettu; // Vänd till Pettu
           }
           else {
             textEl.innerText = `${lang.idle} ⚓`;

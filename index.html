@@ -1,20 +1,21 @@
+
 <!DOCTYPE html>
 <!-- 
 =====================================================
 📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
 =====================================================
+v2.4 - Lade till brusfilter: tvingar fart < 1.5 knop till 0.0 för att dölja GPS-drift.
 v2.3 - Integrerade breadcrumbs-noden för live-hastighet (konverterar m/s till knop).
-v2.2 - Lade till en heartbeat-timer (setInterval) för säker offline-tvingning.
+v2.2 - Lade till en heartbeat-timer för säker offline-tvingning.
 v2.1 - Lade till live-räknare för "Dagens fordon" från logs-noden.
 v2.0 - Tog bort timeout för stillaliggande färja.
-v1.9 - Smart inaktivitet: 10 min timeout om färjan kör.
 =====================================================
 -->
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.3)</title>
+  <title>Pettu Färja - Live-status (v2.4)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -79,7 +80,7 @@ v1.9 - Smart inaktivitet: 10 min timeout om färjan kör.
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.3</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.4</p>
   </footer>
 
   <script>
@@ -122,7 +123,6 @@ v1.9 - Smart inaktivitet: 10 min timeout om färjan kör.
 
     const db = firebase.database();
     
-    // Delad state för att kombinera data från Turer och Breadcrumbs
     let state = {
       turerTs: 0,
       turerFrom: "",
@@ -131,7 +131,6 @@ v1.9 - Smart inaktivitet: 10 min timeout om färjan kör.
       breadSpeedKnots: 0
     };
 
-    // 1. Lyssna på Fordonsloggar
     db.ref(dbPathLogs).on('value', snapshot => {
       let totalVehicles = 0;
       if (snapshot.exists()) {
@@ -144,7 +143,6 @@ v1.9 - Smart inaktivitet: 10 min timeout om färjan kör.
       }
     });
 
-    // 2. Lyssna på Turer (Ger oss bryggan och ankomst-nollning)
     db.ref(dbPathTurer).orderByKey().limitToLast(5).on('value', snapshot => {
       let latestSpeed = 0, latestFrom = "", latestTs = 0;
       snapshot.forEach(child => {
@@ -159,37 +157,31 @@ v1.9 - Smart inaktivitet: 10 min timeout om färjan kör.
       evaluateAndRender();
     });
 
-    // 3. Lyssna på Breadcrumbs (Ger oss live-fart ute på vattnet var 15:e sekund)
     db.ref(dbPathBreadcrumbs).orderByKey().limitToLast(1).on('value', snapshot => {
       snapshot.forEach(child => {
         const val = child.val();
         state.breadTs = val.ts || 0;
-        // Konvertera GPS-hastighet (m/s) till knop
         state.breadSpeedKnots = (val.speed || 0) * 1.94384; 
       });
       evaluateAndRender();
     });
 
-    // Utvärdera vilken data som är färskast och rendera UI
     function evaluateAndRender() {
-      // Om brödsmulan är nyare än sista turen, är vi ute på vattnet och rör oss
       const useBreadcrumb = state.breadTs > state.turerTs;
-      
-      const displaySpeed = useBreadcrumb ? state.breadSpeedKnots : state.turerSpeedKnots;
+      const rawDisplaySpeed = useBreadcrumb ? state.breadSpeedKnots : state.turerSpeedKnots;
       const displayTs = Math.max(state.breadTs, state.turerTs);
       
       updateUI({
-        avgSpeedKnots: displaySpeed,
-        from: state.turerFrom, // 'from' hämtas alltid från turer-noden
+        avgSpeedKnots: rawDisplaySpeed,
+        from: state.turerFrom,
         ts: displayTs
       });
     }
 
-    // TICKANDE KLOCKA: Tvingar omvärdering av Offline-gränsen var 5:e sekund
     setInterval(evaluateAndRender, 5000);
 
     function updateUI(data) {
-      if (!data.ts) return; // Inget att visa ännu
+      if (!data.ts) return; 
 
       const textEl = document.getElementById('statusText'), 
             subEl = document.getElementById('subStatusText'), 
@@ -197,14 +189,14 @@ v1.9 - Smart inaktivitet: 10 min timeout om färjan kör.
             speedBar = document.getElementById('speedBar'), 
             lang = i18n[currentLang];
             
-      const speed = parseFloat(data.avgSpeedKnots || 0).toFixed(1);
+      let rawSpeed = parseFloat(data.avgSpeedKnots || 0);
+      
+      // BRUSFILTER: Är farten under 1.5 knop? Tvinga ner till 0 för att undvika GPS-drift på skärmen.
+      let isMoving = rawSpeed >= 1.5;
+      let displaySpeed = isMoving ? rawSpeed.toFixed(1) : "0.0";
+      
       const fromLoc = (data.from || "").toLowerCase();
-      
-      // Vi betraktar farten som stillastående om den är under 0.5 knop
-      const isMoving = speed > 0.5;
-      
       const nowMs = Date.now();
-      // Offline triggas bara om vi var i rörelse och datan är äldre än 10 minuter
       const isOffline = isMoving && (nowMs - data.ts > 600000); 
 
       if (isOffline) {
@@ -214,12 +206,12 @@ v1.9 - Smart inaktivitet: 10 min timeout om färjan kör.
         subEl.innerText = lang.offlineDesc;
         textEl.innerText = lang.offline;
       } else {
-        speedEl.innerText = speed;
-        speedBar.style.width = `${Math.min((speed / 12) * 100, 100)}%`;
+        speedEl.innerText = displaySpeed;
+        speedBar.style.width = `${Math.min((parseFloat(displaySpeed) / 12) * 100, 100)}%`;
 
         if (isMoving) {
           speedBar.className = "bg-emerald-500 h-full transition-all duration-500";
-          subEl.innerText = `${lang.moving} (${speed} kn)`;
+          subEl.innerText = `${lang.moving} (${displaySpeed} kn)`;
           if (fromLoc.includes("pettu")) textEl.innerText = lang.enRouteFromPettu;
           else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) textEl.innerText = lang.enRouteFromUto;
           else textEl.innerText = `${lang.moving} 🚢`;

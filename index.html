@@ -1,9 +1,20 @@
 <!DOCTYPE html>
+<!-- 
+=====================================================
+📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
+=====================================================
+v2.3 - Integrerade breadcrumbs-noden för live-hastighet (konverterar m/s till knop).
+v2.2 - Lade till en heartbeat-timer (setInterval) för säker offline-tvingning.
+v2.1 - Lade till live-räknare för "Dagens fordon" från logs-noden.
+v2.0 - Tog bort timeout för stillaliggande färja.
+v1.9 - Smart inaktivitet: 10 min timeout om färjan kör.
+=====================================================
+-->
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.2)</title>
+  <title>Pettu Färja - Live-status (v2.3)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -36,11 +47,13 @@
       <p class="text-sm opacity-90" id="serviceDesc">Färjan är för tillfället ur ordinarie drift.</p>
     </div>
 
+    <!-- Huvudstatus-kort -->
     <div class="w-full text-center space-y-2 mb-4">
       <h1 id="statusText" class="text-3xl font-bold tracking-tight text-white px-4">Ansluter...</h1>
       <p id="subStatusText" class="text-slate-400 text-base"></p>
     </div>
 
+    <!-- Hastighetsmätare -->
     <div class="bg-slate-800/50 border border-slate-800 p-6 rounded-3xl w-full text-center shadow-xl backdrop-blur-sm">
       <p class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-1" id="speedLabel">Aktuell hastighet</p>
       <div class="flex items-baseline justify-center space-x-2">
@@ -52,6 +65,7 @@
       </div>
     </div>
 
+    <!-- Statistik: Dagens Fordon -->
     <div class="bg-slate-800/30 border border-slate-800/80 p-5 rounded-3xl w-full flex justify-between items-center shadow-lg backdrop-blur-sm">
       <div class="flex items-center space-x-3">
         <div class="p-2 bg-slate-700/50 rounded-xl text-slate-300">
@@ -65,7 +79,7 @@
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.2</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.3</p>
   </footer>
 
   <script>
@@ -94,6 +108,7 @@
     
     const dbPathTurer = `turer/${todayStr}`; 
     const dbPathLogs = `days/${todayStr}/logs`;
+    const dbPathBreadcrumbs = `breadcrumbs/${todayStr}`;
 
     firebase.initializeApp({
       apiKey: "AIzaSyDregBlw1hjcHotJAk8938xXAjQKbHXS1Q",
@@ -107,15 +122,21 @@
 
     const db = firebase.database();
     
-    // Sparar undan senaste datan så den inbyggda timern kan kolla den
-    let lastKnownData = { avgSpeedKnots: 0, from: "", ts: 0 };
+    // Delad state för att kombinera data från Turer och Breadcrumbs
+    let state = {
+      turerTs: 0,
+      turerFrom: "",
+      turerSpeedKnots: 0,
+      breadTs: 0,
+      breadSpeedKnots: 0
+    };
 
+    // 1. Lyssna på Fordonsloggar
     db.ref(dbPathLogs).on('value', snapshot => {
       let totalVehicles = 0;
       if (snapshot.exists()) {
         snapshot.forEach(child => {
-          const val = child.val();
-          if (val.delta) totalVehicles += val.delta;
+          if (child.val().delta) totalVehicles += child.val().delta;
         });
         document.getElementById('vehiclesCount').innerText = totalVehicles;
       } else {
@@ -123,30 +144,53 @@
       }
     });
 
+    // 2. Lyssna på Turer (Ger oss bryggan och ankomst-nollning)
     db.ref(dbPathTurer).orderByKey().limitToLast(5).on('value', snapshot => {
-      let latestSpeed = 0;
-      let latestFrom = "";
-      let latestTs = 0;
-      
+      let latestSpeed = 0, latestFrom = "", latestTs = 0;
       snapshot.forEach(child => {
         const val = child.val();
         if (val.avgSpeedKnots !== undefined) latestSpeed = val.avgSpeedKnots;
         if (val.from !== undefined) latestFrom = val.from;
         if (val.ts !== undefined && val.ts > latestTs) latestTs = val.ts;
       });
-
-      lastKnownData = { avgSpeedKnots: latestSpeed, from: latestFrom, ts: latestTs };
-      updateUI(lastKnownData);
+      state.turerTs = latestTs;
+      state.turerFrom = latestFrom;
+      state.turerSpeedKnots = latestSpeed;
+      evaluateAndRender();
     });
 
-    // TICKANDE KLOCKA: Tvingar uppdatering av UI var 5:e sekund för att se om Offline-gränsen passerats
-    setInterval(() => {
-      if (lastKnownData.ts > 0) {
-        updateUI(lastKnownData);
-      }
-    }, 5000);
+    // 3. Lyssna på Breadcrumbs (Ger oss live-fart ute på vattnet var 15:e sekund)
+    db.ref(dbPathBreadcrumbs).orderByKey().limitToLast(1).on('value', snapshot => {
+      snapshot.forEach(child => {
+        const val = child.val();
+        state.breadTs = val.ts || 0;
+        // Konvertera GPS-hastighet (m/s) till knop
+        state.breadSpeedKnots = (val.speed || 0) * 1.94384; 
+      });
+      evaluateAndRender();
+    });
+
+    // Utvärdera vilken data som är färskast och rendera UI
+    function evaluateAndRender() {
+      // Om brödsmulan är nyare än sista turen, är vi ute på vattnet och rör oss
+      const useBreadcrumb = state.breadTs > state.turerTs;
+      
+      const displaySpeed = useBreadcrumb ? state.breadSpeedKnots : state.turerSpeedKnots;
+      const displayTs = Math.max(state.breadTs, state.turerTs);
+      
+      updateUI({
+        avgSpeedKnots: displaySpeed,
+        from: state.turerFrom, // 'from' hämtas alltid från turer-noden
+        ts: displayTs
+      });
+    }
+
+    // TICKANDE KLOCKA: Tvingar omvärdering av Offline-gränsen var 5:e sekund
+    setInterval(evaluateAndRender, 5000);
 
     function updateUI(data) {
+      if (!data.ts) return; // Inget att visa ännu
+
       const textEl = document.getElementById('statusText'), 
             subEl = document.getElementById('subStatusText'), 
             speedEl = document.getElementById('speedValue'), 
@@ -155,10 +199,13 @@
             
       const speed = parseFloat(data.avgSpeedKnots || 0).toFixed(1);
       const fromLoc = (data.from || "").toLowerCase();
+      
+      // Vi betraktar farten som stillastående om den är under 0.5 knop
       const isMoving = speed > 0.5;
       
       const nowMs = Date.now();
-      const isOffline = isMoving && data.ts > 0 && (nowMs - data.ts > 600000); // 10 min
+      // Offline triggas bara om vi var i rörelse och datan är äldre än 10 minuter
+      const isOffline = isMoving && (nowMs - data.ts > 600000); 
 
       if (isOffline) {
         speedBar.className = "bg-slate-700 h-full transition-all duration-500";
@@ -185,10 +232,7 @@
         }
       }
       
-      let timeString = data.ts > 0 
-        ? new Date(data.ts).toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) 
-        : new Date().toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      
+      let timeString = new Date(data.ts).toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       document.getElementById('updateTime').innerText = `${lang.liveText} • ${timeString}`;
     }
 
@@ -197,7 +241,7 @@
       document.getElementById('langBtn').innerText = currentLang === 'sv' ? '🇸🇪 SV' : '🇫🇮 FI';
       document.getElementById('speedLabel').innerText = lang.speed;
       document.getElementById('vehiclesLabel').innerText = lang.vehicles;
-      if (lastKnownData.ts > 0) updateUI(lastKnownData);
+      evaluateAndRender();
     }
 
     function toggleLanguage() {

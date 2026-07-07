@@ -3,7 +3,8 @@
 =====================================================
 📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
 =====================================================
-v2.13 - Lade till live-karta med Leaflet.js och mörkt tema, uppdateras via breadcrumbs.
+v2.14 - Bytte till OpenStreetMap med CSS-invertering för mycket tydligare Dark Mode-kontraster.
+v2.13 - Lade till live-karta med Leaflet.js.
 v2.12 - Ersatte väderstreck i text med en roterande pil för vindriktning.
 v2.11 - Lade till +/-, byvindar.
 v2.10 - Lade till live-vattenstånd via FMI:s öppna mareograf-data (Åbo).
@@ -15,7 +16,7 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.13)</title>
+  <title>Pettu Färja - Live-status (v2.14)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -34,10 +35,18 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
   <style>
     body { font-family: 'Inter', sans-serif; }
     .font-mono-tabular { font-family: 'JetBrains+Mono', monospace; font-variant-numeric: tabular-nums; }
-    /* Fix för att Leaflet ska smälta in i Tailwind-rundningen */
+    
+    /* Kartans container */
     .leaflet-container { background: #0f172a; z-index: 10; font-family: 'Inter', sans-serif; }
     .leaflet-control-attribution { background: rgba(15, 23, 42, 0.7) !important; color: #94a3b8 !important; }
     .leaflet-control-attribution a { color: #38bdf8 !important; }
+    
+    /* MAGISKT CSS-FILTER: Gör om ljusa OpenStreetMap till snygg Dark Mode med bra kontrast! */
+    .leaflet-tile {
+      filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%) saturate(80%);
+    }
+    
+    /* Ikonen ska inte påverkas av filtret, den ligger i en annan pane */
     .ferry-marker { font-size: 24px; text-shadow: 0 2px 10px rgba(0,0,0,0.5); text-align: center; line-height: 30px; }
   </style>
 </head>
@@ -123,7 +132,7 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.13</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.14</p>
   </footer>
 
   <script>
@@ -180,17 +189,15 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
     // --- LEAFLET KARTA INIT ---
     let map, ferryMarker;
     function initMap() {
-      // Centrera kartan mellan Pettu och Ulkoluoto (Zoom 14)
       map = L.map('map', { zoomControl: false, dragging: false, scrollWheelZoom: false }).setView([60.0385, 22.9227], 14);
       
-      // Snygg Dark Mode karta från CartoDB
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-        attribution: '&copy; CARTO',
-        subdomains: 'abcd',
+      // Använd standard OpenStreetMap (som har bäst skärgårdsdetaljer)
+      // CSS-filtret .leaflet-tile sköter omvandlingen till Dark Mode!
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap',
         maxZoom: 19
       }).addTo(map);
 
-      // Skapa en emoji-ikon för färjan
       const ferryIcon = L.divIcon({
         html: '<div class="ferry-marker">🚢</div>',
         className: '',
@@ -198,7 +205,6 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
         iconAnchor: [15, 15]
       });
 
-      // Lägg till ikonen (startar i mitten, uppdateras strax via Firebase)
       ferryMarker = L.marker([60.0385, 22.9227], {icon: ferryIcon}).addTo(map);
     }
     initMap();
@@ -294,8 +300,8 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
         const val = child.val();
         state.breadTs = val.ts || 0;
         state.breadSpeedKnots = (val.speed || 0) * 1.94384; 
-        state.breadLat = val.lat || null;  // Nytt: Fånga latitud
-        state.breadLng = val.lng || null;  // Nytt: Fånga longitud
+        state.breadLat = val.lat || null;  
+        state.breadLng = val.lng || null;  
       });
       evaluateAndRender();
     });
@@ -334,7 +340,6 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
       // --- Uppdatera kartan ---
       if (state.breadLat && state.breadLng && ferryMarker) {
         ferryMarker.setLatLng([state.breadLat, state.breadLng]);
-        // Centrera kartan mjukt runt färjan om den rör sig (frivilligt men snyggt)
         if(isMoving) {
           map.panTo([state.breadLat, state.breadLng], { animate: true, duration: 1 });
         }

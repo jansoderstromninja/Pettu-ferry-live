@@ -3,6 +3,7 @@
 =====================================================
 📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
 =====================================================
+v2.20 - Lade till automatiserat paussystem med 15 minuters förvarning.
 v2.19 - Bytte till Esri Satellitkarta och tog bort CSS-färgfiltret.
 v2.18 - Bytte ut kart-emojin mot professionell AIS-markör (cirkel vid kaj, roterande pil vid färd).
 v2.17 - Ersatte "Mot"-texten med en visuell grön pil (Pettu ➔ Ulkoluoto) i rubriken.
@@ -17,7 +18,7 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.19)</title>
+  <title>Pettu Färja - Live-status (v2.20)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -40,8 +41,6 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
     .leaflet-container { background: #0f172a; z-index: 10; font-family: 'Inter', sans-serif; }
     .leaflet-control-attribution { background: rgba(15, 23, 42, 0.7) !important; color: #94a3b8 !important; }
     .leaflet-control-attribution a { color: #38bdf8 !important; }
-    
-    /* Inget färgfilter behövs längre, satellitkartan är mörk och snygg i sig själv! */
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between p-4 selection:bg-teal-500 selection:text-slate-950">
@@ -57,9 +56,17 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
   </header>
 
   <main class="w-full max-w-md mx-auto flex-1 flex flex-col justify-center items-center my-8 space-y-4">
-    <div id="serviceBanner" class="hidden w-full bg-amber-500/10 border border-amber-500/30 text-amber-400 p-4 rounded-2xl text-center space-y-1">
-      <p class="font-bold text-lg" id="serviceTitle">🛠️ Service pågår</p>
-      <p class="text-sm opacity-90" id="serviceDesc">Färjan är för tillfället ur ordinarie drift.</p>
+    
+    <!-- Manuell Service Banner (Dold som standard) -->
+    <div id="serviceBanner" class="hidden w-full bg-rose-500/10 border border-rose-500/30 text-rose-400 p-4 rounded-2xl text-center space-y-1 mb-2">
+      <p class="font-bold text-lg" id="serviceTitle">🛠️ Ur drift</p>
+      <p class="text-sm opacity-90" id="serviceDesc">Färjan är för tillfället tagen ur trafik.</p>
+    </div>
+
+    <!-- Automatisk Paus Banner -->
+    <div id="pauseBanner" class="hidden w-full p-4 rounded-2xl text-center space-y-1 mb-2 shadow-lg backdrop-blur-sm transition-all duration-500">
+      <p class="font-bold text-lg" id="pauseTitle"></p>
+      <p class="text-sm opacity-90 leading-tight" id="pauseDesc"></p>
     </div>
 
     <!-- Huvudstatus-kort -->
@@ -122,12 +129,13 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.19</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.20</p>
   </footer>
 
   <script>
     lucide.createIcons();
 
+    // --- SPRÅK & ÖVERSÄTTNINGAR ---
     const i18n = {
       sv: { 
         speed: "Aktuell hastighet", serviceTitle: "🛠️ Service pågår", serviceDesc: "Färjan är ur drift.", 
@@ -135,7 +143,12 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
         atDockUto: "Ligger vid kaj i Ulkoluoto ⚓", 
         departedPrefix: "Avgick", 
         moving: "Rör på sig", idle: "Ligger stilla", 
-        noData: "Väntar på data... ☕", offline: "Offline 📡", offlineDesc: "Signalen har brutits", vehicles: "Dagens fordon"
+        noData: "Väntar på data... ☕", offline: "Offline 📡", offlineDesc: "Signalen har brutits", vehicles: "Dagens fordon",
+        // Nya Paus-översättningar
+        pauseWarnTitle: "⚠️ Paus närmar sig kl {time}",
+        pauseWarnDesc: "Rasten hålls i Pettu. Överfart från Ulkoluoto kan bli begränsad innan pausen börjar.",
+        pauseActiveTitle: "☕ Färjan har rast",
+        pauseActiveDesc: "Ligger vid kaj i Pettu. Åter i trafik ca kl. {time}."
       },
       fi: { 
         speed: "Nykyinen nopeus", serviceTitle: "🛠️ Huolto käynnissä", serviceDesc: "Lossi ei ole liikenteessä.", 
@@ -143,7 +156,12 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
         atDockUto: "Lossi on laiturissa Ulkoluodossa ⚓", 
         departedPrefix: "Lähti", 
         moving: "Liikkeessä", idle: "Paikallaan", 
-        noData: "Odotetaan dataa... ☕", offline: "Offline 📡", offlineDesc: "Signaali katkesi", vehicles: "Ajoneuvoja tänään"
+        noData: "Odotetaan dataa... ☕", offline: "Offline 📡", offlineDesc: "Signaali katkesi", vehicles: "Ajoneuvoja tänään",
+        // Nya Paus-översättningar
+        pauseWarnTitle: "⚠️ Tauko alkaa klo {time}",
+        pauseWarnDesc: "Tauko pidetään Petussa. Ylitys Ulkoluodosta voi olla rajoitettu ennen tauon alkamista.",
+        pauseActiveTitle: "☕ Lossilla on tauko",
+        pauseActiveDesc: "Laiturissa Petussa. Liikenne jatkuu n. klo {time}."
       }
     };
 
@@ -179,18 +197,67 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
       heading: 0
     };
 
+    // --- AUTOMATISK PAUS-LOGIK ---
+    const pauseSchedules = [
+      { startMins: 8*60+30, endMins: 8*60+50, startStr: "08:30", endStr: "08:50" },
+      { startMins: 11*60+0, endMins: 11*60+30, startStr: "11:00", endStr: "11:30" },
+      { startMins: 16*60+30, endMins: 16*60+50, startStr: "16:30", endStr: "16:50" },
+      { startMins: 19*60+0, endMins: 19*60+30, startStr: "19:00", endStr: "19:30" }
+    ];
+
+    function checkPauses() {
+      const now = new Date();
+      const currentMins = now.getHours() * 60 + now.getMinutes();
+      
+      let currentState = null; // 'warn', 'active', null
+      let activePause = null;
+
+      for (let p of pauseSchedules) {
+        if (currentMins >= p.startMins - 15 && currentMins < p.startMins) {
+          currentState = 'warn';
+          activePause = p;
+          break;
+        } else if (currentMins >= p.startMins && currentMins < p.endMins) {
+          currentState = 'active';
+          activePause = p;
+          break;
+        }
+      }
+
+      const banner = document.getElementById('pauseBanner');
+      const title = document.getElementById('pauseTitle');
+      const desc = document.getElementById('pauseDesc');
+      const lang = i18n[currentLang];
+
+      if (currentState === 'warn') {
+        banner.className = "w-full bg-amber-500/10 border border-amber-500/30 text-amber-400 p-4 rounded-2xl text-center space-y-1 mb-4 shadow-lg backdrop-blur-sm transition-all duration-500";
+        title.innerText = lang.pauseWarnTitle.replace('{time}', activePause.startStr);
+        desc.innerText = lang.pauseWarnDesc;
+        banner.classList.remove('hidden');
+      } else if (currentState === 'active') {
+        banner.className = "w-full bg-orange-500/10 border border-orange-500/30 text-orange-400 p-4 rounded-2xl text-center space-y-1 mb-4 shadow-lg backdrop-blur-sm transition-all duration-500";
+        title.innerText = lang.pauseActiveTitle;
+        desc.innerText = lang.pauseActiveDesc.replace('{time}', activePause.endStr);
+        banner.classList.remove('hidden');
+      } else {
+        banner.classList.add('hidden');
+      }
+    }
+    
+    // Kolla raster en gång i minuten
+    setInterval(checkPauses, 60000);
+    checkPauses(); 
+
     // --- LEAFLET KARTA INIT ---
     let map, ferryMarker;
     function initMap() {
       map = L.map('map', { zoomControl: false, dragging: false, scrollWheelZoom: false }).setView([60.0385, 22.9227], 14);
       
-      // Esri Satellitkarta
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
         attribution: 'Tiles &copy; Esri',
         maxZoom: 19
       }).addTo(map);
 
-      // Skapa en initial punkt-markör
       const dotIcon = L.divIcon({
         html: '<div style="width: 14px; height: 14px; background-color: #10b981; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px rgba(16,185,129,0.8);"></div>',
         className: '',
@@ -418,6 +485,7 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
       document.getElementById('langBtn').innerText = currentLang === 'sv' ? '🇸🇪 SV' : '🇫🇮 FI';
       document.getElementById('speedLabel').innerText = lang.speed;
       document.getElementById('vehiclesLabel').innerText = lang.vehicles;
+      checkPauses(); // Uppdatera ev. paus-banner med nytt språk
       renderWeather(); 
       evaluateAndRender();
     }

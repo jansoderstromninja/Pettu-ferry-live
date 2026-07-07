@@ -3,12 +3,13 @@
 =====================================================
 📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
 =====================================================
+v2.0 - Tog bort timeout för stillaliggande färja. Visar alltid sista kajplats oavsett tid. Offline triggas bara vid signalbortfall under färd.
 v1.9 - Smart inaktivitet: 10 min timeout om färjan kör, 4 timmar om den ligger vid kaj.
 v1.8 - Inaktivitetsskydd: Känner av om plattan är avstängd.
-v1.7 - Lade till denna dolda changelog i koden för att spara historiken på GitHub.
+v1.7 - Lade till dolda changeloggen.
 v1.6 - Fixade split-data-problemet (5 senaste inläggen slås ihop).
 v1.5 - Implementerade dynamisk datum-mapp (ÅÅÅÅ-MM-DD).
-v1.3/1.4 - Felsökning och logik för att läsa kajplats från "from"-fältet.
+v1.3/1.4 - Felsökning och logik för kajplats från "from".
 v1.0 - Första rena passagerarvyn.
 =====================================================
 -->
@@ -16,7 +17,7 @@ v1.0 - Första rena passagerarvyn.
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v1.9)</title>
+  <title>Pettu Färja - Live-status (v2.0)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -68,7 +69,7 @@ v1.0 - Första rena passagerarvyn.
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v1.9</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.0</p>
   </footer>
 
   <script>
@@ -148,10 +149,11 @@ v1.0 - Första rena passagerarvyn.
       const fromLoc = (data.from || "").toLowerCase();
       const isMoving = speed > 0.5;
       
-      // SMART INAKTIVITET: 10 minuter (600 000 ms) om den kör, annars 4 timmar (14 400 000 ms) om den ligger vid kaj
-      const timeoutLimit = isMoving ? 600000 : 14400000;
       const nowMs = Date.now();
-      const isOffline = data.ts > 0 && (nowMs - data.ts > timeoutLimit);
+      
+      // SMART INAKTIVITET v2: Offline triggas BARA om signalen bryts under färd (>0.5 knop) i mer än 10 min.
+      // Ligger den stilla (<0.5 knop) går den aldrig offline utan visar lugnt sista kända kaj.
+      const isOffline = isMoving && data.ts > 0 && (nowMs - data.ts > 600000);
 
       if (isOffline) {
         speedBar.className = "bg-slate-700 h-full transition-all duration-500";

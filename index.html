@@ -1,10 +1,27 @@
+Absolut! Det är en jättebra idé, och eftersom Meteorologiska institutet (FMI) erbjuder helt öppen data kan vi plocka havsvattenståndet direkt från dem utan att behöva skapa konton eller blanda in appen på färjan.
+
+FMI har mätstationer (mareografer) utplacerade i skärgården. För Pettu är stationen i Åbo (Turku) eller Hangö (Hanko) de mest relevanta. I koden nedan har jag kopplat webbsidan mot Åbo-mareografen.
+
+När webbsidan uppdaterar vädret från Open-Meteo, gör den numera samtidigt ett separat anrop till FMI, läser av deras XML-data, plockar ut det absolut färskaste mätvärdet (som anges i millimeter), omvandlar det till centimeter och lägger till ett snyggt plus eller minus framför!
+
+Här är **v2.10** där både väder och vattenstånd hämtas automatiskt.
+
+### 📋 Changelog
+
+* **Version:** 2.10
+* **Ändringar:** Implementerade live-hämtning av havsvattenstånd via FMI:s (Ilmatieteen laitos) öppna WFS-API. Datan hämtas från Åbo mätstation, konverteras från mm till cm och visas i den tidigare förberedda rutan. Både väder och vattenstånd uppdateras nu synkroniserat var 30:e minut.
+
+Kopiera och ersätt hela din `index.html`:
+
+```html
 <!DOCTYPE html>
 <!-- 
 =====================================================
 📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
 =====================================================
-v2.8 - Återinförde Pendel-logiken! turer-noden sparar bara avgångar, så UI måste flippa platsen vid ankomst.
-v2.7 - (BORTTAGEN) Tog bort pendel-logiken.
+v2.10 - Lade till live-vattenstånd via FMI:s öppna mareograf-data (Åbo).
+v2.9 - Lade till live-väder (temp, vind) via Open-Meteo API.
+v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
 v2.6 - Lade till exakt avgångstid i rubriken när färjan är i rörelse.
 v2.4 - Lade till brusfilter för GPS-drift.
 v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
@@ -14,7 +31,7 @@ v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.8)</title>
+  <title>Pettu Färja - Live-status (v2.10)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -41,7 +58,7 @@ v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
     </button>
   </header>
 
-  <main class="w-full max-w-md mx-auto flex-1 flex flex-col justify-center items-center my-8 space-y-6">
+  <main class="w-full max-w-md mx-auto flex-1 flex flex-col justify-center items-center my-8 space-y-4">
     <div id="serviceBanner" class="hidden w-full bg-amber-500/10 border border-amber-500/30 text-amber-400 p-4 rounded-2xl text-center space-y-1">
       <p class="font-bold text-lg" id="serviceTitle">🛠️ Service pågår</p>
       <p class="text-sm opacity-90" id="serviceDesc">Färjan är för tillfället ur ordinarie drift.</p>
@@ -75,11 +92,31 @@ v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
       </div>
       <span class="text-2xl font-bold font-mono-tabular text-white" id="vehiclesCount">-</span>
     </div>
+
+    <!-- Väder & Vattenstånd -->
+    <div class="bg-slate-800/30 border border-slate-800/80 p-4 rounded-3xl w-full flex justify-around items-center shadow-lg backdrop-blur-sm">
+      <!-- Temperatur -->
+      <div class="flex flex-col items-center space-y-1">
+        <i data-lucide="thermometer" class="w-5 h-5 text-slate-400"></i>
+        <span class="text-base font-semibold text-white font-mono-tabular" id="weatherTemp">--°C</span>
+      </div>
+      <!-- Vind -->
+      <div class="flex flex-col items-center space-y-1">
+        <i data-lucide="wind" class="w-5 h-5 text-slate-400"></i>
+        <span class="text-base font-semibold text-white font-mono-tabular" id="weatherWind">-- m/s</span>
+      </div>
+      <!-- Vattenstånd (FMI) -->
+      <div class="flex flex-col items-center space-y-1">
+        <i data-lucide="waves" class="w-5 h-5 text-slate-400"></i>
+        <span class="text-base font-semibold text-white font-mono-tabular" id="waterLevel">-- cm</span>
+      </div>
+    </div>
+
   </main>
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.8</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.10</p>
   </footer>
 
   <script>
@@ -110,6 +147,7 @@ v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
     const dbPathLogs = `days/${todayStr}/logs`;
     const dbPathBreadcrumbs = `breadcrumbs/${todayStr}`;
 
+    // FIREBASE INIT
     firebase.initializeApp({
       apiKey: "AIzaSyDregBlw1hjcHotJAk8938xXAjQKbHXS1Q",
       authDomain: "fordonsraknare.firebaseapp.com",
@@ -130,6 +168,55 @@ v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
       breadSpeedKnots: 0
     };
 
+    // VÄDER-HÄMTNING (Open-Meteo för lat 60.04, lng 22.92)
+    async function fetchWeather() {
+      try {
+        const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=60.04&longitude=22.92&current=temperature_2m,wind_speed_10m&wind_speed_unit=ms');
+        const data = await res.json();
+        if(data && data.current) {
+          const temp = Math.round(data.current.temperature_2m);
+          const wind = data.current.wind_speed_10m.toFixed(1); 
+          document.getElementById('weatherTemp').innerText = `${temp}°C`;
+          document.getElementById('weatherWind').innerText = `${wind} m/s`;
+        }
+      } catch (error) {
+        console.error("Kunde inte hämta väder:", error);
+      }
+    }
+
+    // VATTENSTÅND-HÄMTNING (FMI Mareograf Åbo)
+    async function fetchWaterLevel() {
+      try {
+        const url = 'https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature&storedquery_id=fmi::observations::mareograph::simple&place=Turku';
+        const res = await fetch(url);
+        const text = await res.text();
+        
+        // Plocka ut värden via Regex eftersom FMI skickar XML
+        const matches = [...text.matchAll(/<BsWfs:ParameterValue>([^<]+)<\/BsWfs:ParameterValue>/g)];
+        
+        if (matches.length > 0) {
+          const latestValue = parseFloat(matches[matches.length - 1][1]);
+          if (!isNaN(latestValue)) {
+            // FMI levererar N2000-data i millimeter, konvertera till cm
+            const cm = Math.round(latestValue / 10);
+            const sign = cm > 0 ? "+" : "";
+            document.getElementById('waterLevel').innerText = `${sign}${cm} cm`;
+          }
+        }
+      } catch (error) {
+        console.error("Kunde inte hämta vattenstånd från FMI:", error);
+      }
+    }
+
+    // Hämta extern data vid start, och därefter var 30:e minut
+    function fetchExternalData() {
+      fetchWeather();
+      fetchWaterLevel();
+    }
+    fetchExternalData();
+    setInterval(fetchExternalData, 30 * 60 * 1000);
+
+    // DATABAS-LYSSNARE
     db.ref(dbPathLogs).on('value', snapshot => {
       let totalVehicles = 0;
       if (snapshot.exists()) {
@@ -221,12 +308,11 @@ v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
           speedBar.className = "bg-slate-600 h-full transition-all duration-500";
           subEl.innerText = lang.idle;
           
-          // PENDEL-LOGIK TILLBAKA! Eftersom databasen bara loggar avgångar, måste vi vända på platsen vid ankomst.
           if (fromLoc.includes("pettu")) {
-            textEl.innerText = lang.atDockUto; // Vänd till Ulkoluoto
+            textEl.innerText = lang.atDockUto; 
           }
           else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) {
-            textEl.innerText = lang.atDockPettu; // Vänd till Pettu
+            textEl.innerText = lang.atDockPettu; 
           }
           else {
             textEl.innerText = `${lang.idle} ⚓`;
@@ -255,3 +341,5 @@ v2.3 - Integrerade breadcrumbs-noden för live-hastighet.
   </script>
 </body>
 </html>
+
+```

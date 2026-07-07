@@ -3,18 +3,20 @@
 =====================================================
 📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
 =====================================================
+v1.9 - Smart inaktivitet: 10 min timeout om färjan kör, 4 timmar om den ligger vid kaj.
+v1.8 - Inaktivitetsskydd: Känner av om plattan är avstängd.
 v1.7 - Lade till denna dolda changelog i koden för att spara historiken på GitHub.
-v1.6 - Fixade split-data-problemet: Hämtar nu de 5 senaste inläggen från Firebase och slår ihop hastighet/plats för att slippa tomma värden.
-v1.5 - Implementerade dynamisk datum-mapp (ÅÅÅÅ-MM-DD) så sidan letar på rätt ställe efter midnatt.
+v1.6 - Fixade split-data-problemet (5 senaste inläggen slås ihop).
+v1.5 - Implementerade dynamisk datum-mapp (ÅÅÅÅ-MM-DD).
 v1.3/1.4 - Felsökning och logik för att läsa kajplats från "from"-fältet.
-v1.0 - Första rena passagerarvyn (ersatte gamla testversionerna).
+v1.0 - Första rena passagerarvyn.
 =====================================================
 -->
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v1.7)</title>
+  <title>Pettu Färja - Live-status (v1.9)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -66,13 +68,41 @@ v1.0 - Första rena passagerarvyn (ersatte gamla testversionerna).
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v1.7</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v1.9</p>
   </footer>
 
   <script>
     const i18n = {
-      sv: { speed: "Aktuell hastighet", serviceTitle: "🛠️ Service pågår", serviceDesc: "Färjan är ur drift.", liveText: "Uppdateras live från Pettu-linjen", atDockPettu: "Ligger vid kaj i Pettu ⚓", atDockUto: "Ligger vid kaj i Ulkoluoto ⚓", enRouteFromPettu: "Har avgått från Pettu 🚢", enRouteFromUto: "Har avgått från Ulkoluoto 🚢", moving: "Rör på sig", idle: "Ligger stilla", noData: "Väntar på data... ☕" },
-      fi: { speed: "Nykyinen nopeus", serviceTitle: "🛠️ Huolto käynnissä", serviceDesc: "Lossi ei ole liikenteessä.", liveText: "Päivitetään livenä Pettu-linjalta", atDockPettu: "Lossi on laiturissa Petussa ⚓", atDockUto: "Lossi on laiturissa Ulkoluodossa ⚓", enRouteFromPettu: "Lähtenyt Petusta 🚢", enRouteFromUto: "Lähtenyt Ulkoluodosta 🚢", moving: "Liikkeessä", idle: "Paikallaan", noData: "Odotetaan dataa... ☕" }
+      sv: { 
+        speed: "Aktuell hastighet", 
+        serviceTitle: "🛠️ Service pågår", 
+        serviceDesc: "Färjan är ur drift.", 
+        liveText: "Senaste signal från färjan", 
+        atDockPettu: "Ligger vid kaj i Pettu ⚓", 
+        atDockUto: "Ligger vid kaj i Ulkoluoto ⚓", 
+        enRouteFromPettu: "Har avgått från Pettu 🚢", 
+        enRouteFromUto: "Har avgått från Ulkoluoto 🚢", 
+        moving: "Rör på sig", 
+        idle: "Ligger stilla", 
+        noData: "Väntar på data... ☕",
+        offline: "Offline 📡",
+        offlineDesc: "Systemet är avstängt eller saknar täckning"
+      },
+      fi: { 
+        speed: "Nykyinen nopeus", 
+        serviceTitle: "🛠️ Huolto käynnissä", 
+        serviceDesc: "Lossi ei ole liikenteessä.", 
+        liveText: "Viimeisin signaali lossilta", 
+        atDockPettu: "Lossi on laiturissa Petussa ⚓", 
+        atDockUto: "Lossi on laiturissa Ulkoluodossa ⚓", 
+        enRouteFromPettu: "Lähtenyt Petusta 🚢", 
+        enRouteFromUto: "Lähtenyt Ulkoluodosta 🚢", 
+        moving: "Liikkeessä", 
+        idle: "Paikallaan", 
+        noData: "Odotetaan dataa... ☕",
+        offline: "Offline 📡",
+        offlineDesc: "Järjestelmä on sammutettu tai ei verkkoa"
+      }
     };
 
     let currentLang = localStorage.getItem('pettu_lang') || 'sv';
@@ -95,39 +125,67 @@ v1.0 - Första rena passagerarvyn (ersatte gamla testversionerna).
     db.ref(dbPath).orderByKey().limitToLast(5).on('value', snapshot => {
       let latestSpeed = 0;
       let latestFrom = "";
+      let latestTs = 0;
       
       snapshot.forEach(child => {
         const val = child.val();
         if (val.avgSpeedKnots !== undefined) latestSpeed = val.avgSpeedKnots;
         if (val.from !== undefined) latestFrom = val.from;
+        if (val.ts !== undefined && val.ts > latestTs) latestTs = val.ts;
       });
 
-      updateUI({ avgSpeedKnots: latestSpeed, from: latestFrom });
+      updateUI({ avgSpeedKnots: latestSpeed, from: latestFrom, ts: latestTs });
     });
 
     function updateUI(data) {
-      const textEl = document.getElementById('statusText'), subEl = document.getElementById('subStatusText'), speedEl = document.getElementById('speedValue'), speedBar = document.getElementById('speedBar'), lang = i18n[currentLang];
+      const textEl = document.getElementById('statusText'), 
+            subEl = document.getElementById('subStatusText'), 
+            speedEl = document.getElementById('speedValue'), 
+            speedBar = document.getElementById('speedBar'), 
+            lang = i18n[currentLang];
+            
       const speed = parseFloat(data.avgSpeedKnots || 0).toFixed(1);
-      speedEl.innerText = speed;
-      speedBar.style.width = `${Math.min((speed / 12) * 100, 100)}%`;
-
       const fromLoc = (data.from || "").toLowerCase();
       const isMoving = speed > 0.5;
+      
+      // SMART INAKTIVITET: 10 minuter (600 000 ms) om den kör, annars 4 timmar (14 400 000 ms) om den ligger vid kaj
+      const timeoutLimit = isMoving ? 600000 : 14400000;
+      const nowMs = Date.now();
+      const isOffline = data.ts > 0 && (nowMs - data.ts > timeoutLimit);
 
-      if (isMoving) {
-        speedBar.className = "bg-emerald-500 h-full transition-all duration-500";
-        subEl.innerText = `${lang.moving} (${speed} kn)`;
-        if (fromLoc.includes("pettu")) textEl.innerText = lang.enRouteFromPettu;
-        else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) textEl.innerText = lang.enRouteFromUto;
-        else textEl.innerText = `${lang.moving} 🚢`;
+      if (isOffline) {
+        speedBar.className = "bg-slate-700 h-full transition-all duration-500";
+        speedBar.style.width = "0%";
+        speedEl.innerText = "-.-";
+        subEl.innerText = lang.offlineDesc;
+        textEl.innerText = lang.offline;
       } else {
-        speedBar.className = "bg-slate-600 h-full transition-all duration-500";
-        subEl.innerText = lang.idle;
-        if (fromLoc.includes("pettu")) textEl.innerText = lang.atDockPettu;
-        else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) textEl.innerText = lang.atDockUto;
-        else textEl.innerText = `${lang.idle} ⚓`;
+        speedEl.innerText = speed;
+        speedBar.style.width = `${Math.min((speed / 12) * 100, 100)}%`;
+
+        if (isMoving) {
+          speedBar.className = "bg-emerald-500 h-full transition-all duration-500";
+          subEl.innerText = `${lang.moving} (${speed} kn)`;
+          if (fromLoc.includes("pettu")) textEl.innerText = lang.enRouteFromPettu;
+          else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) textEl.innerText = lang.enRouteFromUto;
+          else textEl.innerText = `${lang.moving} 🚢`;
+        } else {
+          speedBar.className = "bg-slate-600 h-full transition-all duration-500";
+          subEl.innerText = lang.idle;
+          if (fromLoc.includes("pettu")) textEl.innerText = lang.atDockPettu;
+          else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) textEl.innerText = lang.atDockUto;
+          else textEl.innerText = `${lang.idle} ⚓`;
+        }
       }
-      document.getElementById('updateTime').innerText = `${lang.liveText} • ${new Date().toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+      
+      let timeString = "";
+      if (data.ts > 0) {
+        timeString = new Date(data.ts).toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      } else {
+        timeString = new Date().toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+      
+      document.getElementById('updateTime').innerText = `${lang.liveText} • ${timeString}`;
     }
 
     function updateLangDOM() {

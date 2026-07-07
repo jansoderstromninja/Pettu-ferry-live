@@ -3,10 +3,11 @@
 =====================================================
 📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
 =====================================================
+v2.19 - Bytte till Esri Satellitkarta och tog bort CSS-färgfiltret.
 v2.18 - Bytte ut kart-emojin mot professionell AIS-markör (cirkel vid kaj, roterande pil vid färd).
 v2.17 - Ersatte "Mot"-texten med en visuell grön pil (Pettu ➔ Ulkoluoto) i rubriken.
 v2.16 - Ändrade huvudrubrik under färd till destination.
-v2.15 - Maxade kontrast och färgmättnad i kartfiltret för knivskarp skärgårds-vy.
+v2.15 - Maxade kontrast för kartfiltret.
 v2.14 - Bytte till OpenStreetMap med CSS-invertering.
 v2.13 - Lade till live-karta med Leaflet.js.
 v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
@@ -16,7 +17,7 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.18)</title>
+  <title>Pettu Färja - Live-status (v2.19)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -40,10 +41,7 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
     .leaflet-control-attribution { background: rgba(15, 23, 42, 0.7) !important; color: #94a3b8 !important; }
     .leaflet-control-attribution a { color: #38bdf8 !important; }
     
-    /* CSS-filter för högkontrast Dark Mode */
-    .leaflet-tile {
-      filter: invert(100%) hue-rotate(180deg) brightness(105%) contrast(150%) saturate(150%);
-    }
+    /* Inget färgfilter behövs längre, satellitkartan är mörk och snygg i sig själv! */
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between p-4 selection:bg-teal-500 selection:text-slate-950">
@@ -124,7 +122,7 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.18</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.19</p>
   </footer>
 
   <script>
@@ -178,7 +176,7 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
       breadSpeedKnots: 0,
       breadLat: null,
       breadLng: null,
-      heading: 0 // Ny variabel för att spara färdriktning i grader
+      heading: 0
     };
 
     // --- LEAFLET KARTA INIT ---
@@ -186,8 +184,9 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
     function initMap() {
       map = L.map('map', { zoomControl: false, dragging: false, scrollWheelZoom: false }).setView([60.0385, 22.9227], 14);
       
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap',
+      // Esri Satellitkarta
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles &copy; Esri',
         maxZoom: 19
       }).addTo(map);
 
@@ -298,7 +297,6 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
         const newLat = val.lat || null;
         const newLng = val.lng || null;
 
-        // Räkna ut riktningen (heading) om vi rört oss till en ny punkt
         if (state.breadLat && state.breadLng && newLat && newLng && (state.breadLat !== newLat || state.breadLng !== newLng)) {
            const lat1 = state.breadLat * Math.PI / 180;
            const lat2 = newLat * Math.PI / 180;
@@ -348,13 +346,11 @@ v2.12 - Ersatte väderstreck med dynamisk SVG-pil.
       // --- Uppdatera kartan (Punkt eller Pil) ---
       if (state.breadLat && state.breadLng && ferryMarker) {
         
-        // Punkt-ikonen
         const dotIcon = L.divIcon({
           html: '<div style="width: 14px; height: 14px; background-color: #10b981; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 0 8px rgba(16,185,129,0.8);"></div>',
           className: '', iconSize: [14, 14], iconAnchor: [7, 7]
         });
 
-        // Pil-ikonen (Roterad enligt kurs)
         const arrowIcon = L.divIcon({
           html: `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="#10b981" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(${state.heading}deg); filter: drop-shadow(0px 2px 4px rgba(0,0,0,0.5));"><polygon points="12 2 19 21 12 17 5 21 12 2"></polygon></svg>`,
           className: '', iconSize: [24, 24], iconAnchor: [12, 12]

@@ -1,21 +1,9 @@
-
 <!DOCTYPE html>
-<!-- 
-=====================================================
-📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
-=====================================================
-v2.4 - Lade till brusfilter: tvingar fart < 1.5 knop till 0.0 för att dölja GPS-drift.
-v2.3 - Integrerade breadcrumbs-noden för live-hastighet (konverterar m/s till knop).
-v2.2 - Lade till en heartbeat-timer för säker offline-tvingning.
-v2.1 - Lade till live-räknare för "Dagens fordon" från logs-noden.
-v2.0 - Tog bort timeout för stillaliggande färja.
-=====================================================
--->
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.4)</title>
+  <title>Pettu Färja - Live-status (v2.5)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -48,13 +36,11 @@ v2.0 - Tog bort timeout för stillaliggande färja.
       <p class="text-sm opacity-90" id="serviceDesc">Färjan är för tillfället ur ordinarie drift.</p>
     </div>
 
-    <!-- Huvudstatus-kort -->
     <div class="w-full text-center space-y-2 mb-4">
       <h1 id="statusText" class="text-3xl font-bold tracking-tight text-white px-4">Ansluter...</h1>
       <p id="subStatusText" class="text-slate-400 text-base"></p>
     </div>
 
-    <!-- Hastighetsmätare -->
     <div class="bg-slate-800/50 border border-slate-800 p-6 rounded-3xl w-full text-center shadow-xl backdrop-blur-sm">
       <p class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-1" id="speedLabel">Aktuell hastighet</p>
       <div class="flex items-baseline justify-center space-x-2">
@@ -66,7 +52,6 @@ v2.0 - Tog bort timeout för stillaliggande färja.
       </div>
     </div>
 
-    <!-- Statistik: Dagens Fordon -->
     <div class="bg-slate-800/30 border border-slate-800/80 p-5 rounded-3xl w-full flex justify-between items-center shadow-lg backdrop-blur-sm">
       <div class="flex items-center space-x-3">
         <div class="p-2 bg-slate-700/50 rounded-xl text-slate-300">
@@ -80,7 +65,7 @@ v2.0 - Tog bort timeout för stillaliggande färja.
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.4</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.5</p>
   </footer>
 
   <script>
@@ -191,7 +176,6 @@ v2.0 - Tog bort timeout för stillaliggande färja.
             
       let rawSpeed = parseFloat(data.avgSpeedKnots || 0);
       
-      // BRUSFILTER: Är farten under 1.5 knop? Tvinga ner till 0 för att undvika GPS-drift på skärmen.
       let isMoving = rawSpeed >= 1.5;
       let displaySpeed = isMoving ? rawSpeed.toFixed(1) : "0.0";
       
@@ -212,15 +196,26 @@ v2.0 - Tog bort timeout för stillaliggande färja.
         if (isMoving) {
           speedBar.className = "bg-emerald-500 h-full transition-all duration-500";
           subEl.innerText = `${lang.moving} (${displaySpeed} kn)`;
+          
+          // Under färd: Visa den brygga vi åkte ifrån
           if (fromLoc.includes("pettu")) textEl.innerText = lang.enRouteFromPettu;
           else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) textEl.innerText = lang.enRouteFromUto;
           else textEl.innerText = `${lang.moving} 🚢`;
         } else {
           speedBar.className = "bg-slate-600 h-full transition-all duration-500";
           subEl.innerText = lang.idle;
-          if (fromLoc.includes("pettu")) textEl.innerText = lang.atDockPettu;
-          else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) textEl.innerText = lang.atDockUto;
-          else textEl.innerText = `${lang.idle} ⚓`;
+          
+          // Vilar vid kaj: Invertera logiken (Pendel-logik)
+          // Om senaste kända avgång var Pettu och vi nu står stilla, MÅSTE vi vara vid Ulkoluoto
+          if (fromLoc.includes("pettu")) {
+            textEl.innerText = lang.atDockUto; // FLIPPAD!
+          }
+          else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) {
+            textEl.innerText = lang.atDockPettu; // FLIPPAD!
+          }
+          else {
+            textEl.innerText = `${lang.idle} ⚓`;
+          }
         }
       }
       

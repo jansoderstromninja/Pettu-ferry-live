@@ -1,21 +1,26 @@
 <!DOCTYPE html>
-<!-- VERSION: 1.5 -->
+<!-- 
+=====================================================
+📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
+=====================================================
+v1.7 - Lade till denna dolda changelog i koden för att spara historiken på GitHub.
+v1.6 - Fixade split-data-problemet: Hämtar nu de 5 senaste inläggen från Firebase och slår ihop hastighet/plats för att slippa tomma värden.
+v1.5 - Implementerade dynamisk datum-mapp (ÅÅÅÅ-MM-DD) så sidan letar på rätt ställe efter midnatt.
+v1.3/1.4 - Felsökning och logik för att läsa kajplats från "from"-fältet.
+v1.0 - Första rena passagerarvyn (ersatte gamla testversionerna).
+=====================================================
+-->
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v1.5)</title>
+  <title>Pettu Färja - Live-status (v1.7)</title>
   
-  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  
-  <!-- Google Fonts & Lucide Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
   <script src="https://unpkg.com/lucide@latest"></script>
-
-  <!-- Firebase Legacy SDKs -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
@@ -24,9 +29,8 @@
     .font-mono-tabular { font-family: 'JetBrains+Mono', monospace; font-variant-numeric: tabular-nums; }
   </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between p-4 selection:bg-teal-500 selection:text-slate-950">
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between p-4">
 
-  <!-- TOP BAR: Språk & Titel -->
   <header class="flex justify-between items-center w-full max-w-md mx-auto pt-2">
     <div class="flex items-center space-x-2">
       <div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div>
@@ -37,92 +41,45 @@
     </button>
   </header>
 
-  <!-- MAIN CONTENT: Status & Fart -->
   <main class="w-full max-w-md mx-auto flex-1 flex flex-col justify-center items-center my-8 space-y-8">
-    
-    <!-- Service/Driftmeddelande (Dolt som standard) -->
     <div id="serviceBanner" class="hidden w-full bg-amber-500/10 border border-amber-500/30 text-amber-400 p-4 rounded-2xl text-center space-y-1">
       <p class="font-bold text-lg" id="serviceTitle">🛠️ Service pågår</p>
       <p class="text-sm opacity-90" id="serviceDesc">Färjan är för tillfället ur ordinarie drift.</p>
     </div>
 
-    <!-- Huvudstatus-kort -->
     <div class="w-full text-center space-y-2">
-      <h1 id="statusText" class="text-3xl font-bold tracking-tight text-white px-4">
-        Ansluter till färjan...
-      </h1>
+      <h1 id="statusText" class="text-3xl font-bold tracking-tight text-white px-4">Ansluter...</h1>
       <p id="subStatusText" class="text-slate-400 text-base"></p>
     </div>
 
-    <!-- Hastighetsmätare -->
     <div class="bg-slate-800/50 border border-slate-800 p-6 rounded-3xl w-full text-center shadow-xl backdrop-blur-sm">
       <p class="text-xs uppercase tracking-wider font-semibold text-slate-400 mb-1" id="speedLabel">Aktuell hastighet</p>
       <div class="flex items-baseline justify-center space-x-2">
         <span id="speedValue" class="text-6xl font-bold font-mono-tabular text-white transition-all duration-300">0.0</span>
         <span class="text-lg text-slate-400 font-medium">kn</span>
       </div>
-      <!-- Liten visuell indikator för rörelse -->
       <div class="w-full bg-slate-700 h-1.5 rounded-full mt-4 overflow-hidden">
         <div id="speedBar" class="bg-emerald-500 h-full w-0 transition-all duration-500"></div>
       </div>
     </div>
-
   </main>
 
-  <!-- FOOTER: Info & Version -->
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
-    <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live från Pettu-linjen</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v1.5</p>
+    <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v1.7</p>
   </footer>
 
   <script>
-    // --- DICTIONARY FÖR SPRÅK ---
     const i18n = {
-      sv: {
-        connecting: "Ansluter till färjan...",
-        speed: "Aktuell hastighet",
-        serviceTitle: "🛠️ Service pågår",
-        serviceDesc: "Färjan är för tillfället ur ordinarie drift.",
-        liveText: "Uppdateras live från Pettu-linjen",
-        atDockPettu: "Ligger vid kaj i Pettu ⚓",
-        atDockUto: "Ligger vid kaj i Ulkoluoto ⚓",
-        enRouteFromPettu: "Har avgått från Pettu 🚢",
-        enRouteFromUto: "Har avgått från Ulkoluoto 🚢",
-        moving: "Rör på sig",
-        idle: "Ligger stilla",
-        unknown: "Status okänd",
-        noData: "Väntar på första turen... ☕"
-      },
-      fi: {
-        connecting: "Yhdistetään lauttaan...",
-        speed: "Nykyinen nopeus",
-        serviceTitle: "🛠️ Huolto käynnissä",
-        serviceDesc: "Lossi ei ole tällä hetkellä normaalissa liikenteessä.",
-        liveText: "Päivitetään livenä Pettu-linjalta",
-        atDockPettu: "Lossi on laiturissa Petussa ⚓",
-        atDockUto: "Lossi on laiturissa Ulkoluodossa ⚓",
-        enRouteFromPettu: "Lähtenyt Petusta 🚢",
-        enRouteFromUto: "Lähtenyt Ulkoluodosta 🚢",
-        moving: "Liikkeessä",
-        idle: "Paikallaan",
-        unknown: "Tila tuntematon",
-        noData: "Odotetaan ensimmäistä matkaa... ☕"
-      }
+      sv: { speed: "Aktuell hastighet", serviceTitle: "🛠️ Service pågår", serviceDesc: "Färjan är ur drift.", liveText: "Uppdateras live från Pettu-linjen", atDockPettu: "Ligger vid kaj i Pettu ⚓", atDockUto: "Ligger vid kaj i Ulkoluoto ⚓", enRouteFromPettu: "Har avgått från Pettu 🚢", enRouteFromUto: "Har avgått från Ulkoluoto 🚢", moving: "Rör på sig", idle: "Ligger stilla", noData: "Väntar på data... ☕" },
+      fi: { speed: "Nykyinen nopeus", serviceTitle: "🛠️ Huolto käynnissä", serviceDesc: "Lossi ei ole liikenteessä.", liveText: "Päivitetään livenä Pettu-linjalta", atDockPettu: "Lossi on laiturissa Petussa ⚓", atDockUto: "Lossi on laiturissa Ulkoluodossa ⚓", enRouteFromPettu: "Lähtenyt Petusta 🚢", enRouteFromUto: "Lähtenyt Ulkoluodosta 🚢", moving: "Liikkeessä", idle: "Paikallaan", noData: "Odotetaan dataa... ☕" }
     };
 
     let currentLang = localStorage.getItem('pettu_lang') || 'sv';
-    
-    // SKAPA DAGENS DATUM (ÅÅÅÅ-MM-DD)
     const today = new Date();
-    const year = today.getFullYear();
-    const month = String(today.getMonth() + 1).padStart(2, '0');
-    const day = String(today.getDate()).padStart(2, '0');
-    const todayStr = `${year}-${month}-${day}`;
-    
-    const dbPath = `turer/${todayStr}`; 
+    const dbPath = `turer/${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`; 
 
-    // --- FIREBASE-KONFIGURATION ---
-    const firebaseConfig = {
+    firebase.initializeApp({
       apiKey: "AIzaSyDregBlw1hjcHotJAk8938xXAjQKbHXS1Q",
       authDomain: "fordonsraknare.firebaseapp.com",
       databaseURL: "https://fordonsraknare-default-rtdb.europe-west1.firebasedatabase.app",
@@ -130,103 +87,53 @@
       storageBucket: "fordonsraknare.firebasestorage.app",
       messagingSenderId: "260033893182",
       appId: "1:260033893182:web:328da94483ad4b245f926f"
-    };
-
-    // Initiera Firebase
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.database();
-
-    // Lyssna på driftstatus
-    db.ref('config/driftstatus').on('value', snapshot => {
-      const status = snapshot.val();
-      const banner = document.getElementById('serviceBanner');
-      if (status === 'service') {
-        banner.classList.remove('hidden');
-      } else {
-        banner.classList.add('hidden');
-      }
     });
 
-    // Lyssna på dagens datummapp
-    db.ref(dbPath).orderByKey().limitToLast(1).on('value', snapshot => {
-      const textEl = document.getElementById('statusText');
-      const subEl = document.getElementById('subStatusText');
-      const lang = i18n[currentLang];
+    const db = firebase.database();
 
-      if (!snapshot.exists()) {
-        textEl.innerText = lang.noData;
-        subEl.innerText = "Ingen körning registrerad idag ännu.";
-        return;
-      }
-
-      snapshot.forEach(childSnapshot => {
-        const data = childSnapshot.val() || {};
-        updateUI(data);
+    // Pussel-logik: Hämta 5 senaste, kombinera data
+    db.ref(dbPath).orderByKey().limitToLast(5).on('value', snapshot => {
+      let latestSpeed = 0;
+      let latestFrom = "";
+      
+      snapshot.forEach(child => {
+        const val = child.val();
+        if (val.avgSpeedKnots !== undefined) latestSpeed = val.avgSpeedKnots;
+        if (val.from !== undefined) latestFrom = val.from;
       });
+
+      updateUI({ avgSpeedKnots: latestSpeed, from: latestFrom });
     });
 
     function updateUI(data) {
-      const textEl = document.getElementById('statusText');
-      const subEl = document.getElementById('subStatusText');
-      const speedEl = document.getElementById('speedValue');
-      const speedBar = document.getElementById('speedBar');
-      const lang = i18n[currentLang];
-
-      // 1. Hantera hastighet
-      const speed = parseFloat(data.avgSpeedKnots || data.speed || 0).toFixed(1);
+      const textEl = document.getElementById('statusText'), subEl = document.getElementById('subStatusText'), speedEl = document.getElementById('speedValue'), speedBar = document.getElementById('speedBar'), lang = i18n[currentLang];
+      const speed = parseFloat(data.avgSpeedKnots || 0).toFixed(1);
       speedEl.innerText = speed;
-      
-      const percentage = Math.min((speed / 12) * 100, 100);
-      speedBar.style.width = `${percentage}%`;
+      speedBar.style.width = `${Math.min((speed / 12) * 100, 100)}%`;
 
-      // 2. Tolka plats utifrån fältet "from"
-      const fromLocation = (data.from || "").toLowerCase();
+      const fromLoc = (data.from || "").toLowerCase();
       const isMoving = speed > 0.5;
 
       if (isMoving) {
         speedBar.className = "bg-emerald-500 h-full transition-all duration-500";
         subEl.innerText = `${lang.moving} (${speed} kn)`;
-        
-        if (fromLocation.includes("pettu")) {
-          textEl.innerText = lang.enRouteFromPettu;
-        } else if (fromLocation.includes("utö") || fromLocation.includes("uto") || fromLocation.includes("ulkoluoto")) {
-          textEl.innerText = lang.enRouteFromUto;
-        } else {
-          textEl.innerText = `${lang.moving} 🚢`;
-        }
+        if (fromLoc.includes("pettu")) textEl.innerText = lang.enRouteFromPettu;
+        else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) textEl.innerText = lang.enRouteFromUto;
+        else textEl.innerText = `${lang.moving} 🚢`;
       } else {
         speedBar.className = "bg-slate-600 h-full transition-all duration-500";
         subEl.innerText = lang.idle;
-
-        if (fromLocation.includes("pettu")) {
-          textEl.innerText = lang.atDockPettu;
-        } else if (fromLocation.includes("utö") || fromLocation.includes("uto") || fromLocation.includes("ulkoluoto")) {
-          textEl.innerText = lang.atDockUto;
-        } else {
-          textEl.innerText = `${lang.idle} ⚓`;
-        }
+        if (fromLoc.includes("pettu")) textEl.innerText = lang.atDockPettu;
+        else if (fromLoc.includes("utö") || fromLoc.includes("uto") || fromLoc.includes("ulkoluoto")) textEl.innerText = lang.atDockUto;
+        else textEl.innerText = `${lang.idle} ⚓`;
       }
-      
-      // Sätt klockslag för senaste uppdatering
-      const now = new Date().toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      document.getElementById('updateTime').innerText = `${lang.liveText} • ${now}`;
+      document.getElementById('updateTime').innerText = `${lang.liveText} • ${new Date().toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
     }
 
-    // --- SPRÅKHANTERING ---
     function updateLangDOM() {
       const lang = i18n[currentLang];
       document.getElementById('langBtn').innerText = currentLang === 'sv' ? '🇸🇪 SV' : '🇫🇮 FI';
       document.getElementById('speedLabel').innerText = lang.speed;
-      document.getElementById('serviceTitle').innerText = lang.serviceTitle;
-      document.getElementById('serviceDesc').innerText = lang.serviceDesc;
-      
-      firebase.database().ref(dbPath).orderByKey().limitToLast(1).once('value', snapshot => {
-        if (!snapshot.exists()) {
-          document.getElementById('statusText').innerText = lang.noData;
-        } else {
-          snapshot.forEach(childSnapshot => updateUI(childSnapshot.val()));
-        }
-      });
     }
 
     function toggleLanguage() {
@@ -234,8 +141,6 @@
       localStorage.setItem('pettu_lang', currentLang);
       updateLangDOM();
     }
-
-    // Kör vid start
     updateLangDOM();
   </script>
 </body>

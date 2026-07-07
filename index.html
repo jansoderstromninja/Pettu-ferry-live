@@ -3,6 +3,7 @@
 =====================================================
 📋 CHANGELOG (PETTU FÄRJA - LIVE-STATUS)
 =====================================================
+v2.13 - Lade till live-karta med Leaflet.js och mörkt tema, uppdateras via breadcrumbs.
 v2.12 - Ersatte väderstreck i text med en roterande pil för vindriktning.
 v2.11 - Lade till +/-, byvindar.
 v2.10 - Lade till live-vattenstånd via FMI:s öppna mareograf-data (Åbo).
@@ -14,19 +15,30 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status (v2.12)</title>
+  <title>Pettu Färja - Live-status (v2.13)</title>
   
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  
+  <!-- Ikoner & Firebase -->
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 
+  <!-- Leaflet CSS & JS (För Kartan) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
   <style>
     body { font-family: 'Inter', sans-serif; }
     .font-mono-tabular { font-family: 'JetBrains+Mono', monospace; font-variant-numeric: tabular-nums; }
+    /* Fix för att Leaflet ska smälta in i Tailwind-rundningen */
+    .leaflet-container { background: #0f172a; z-index: 10; font-family: 'Inter', sans-serif; }
+    .leaflet-control-attribution { background: rgba(15, 23, 42, 0.7) !important; color: #94a3b8 !important; }
+    .leaflet-control-attribution a { color: #38bdf8 !important; }
+    .ferry-marker { font-size: 24px; text-shadow: 0 2px 10px rgba(0,0,0,0.5); text-align: center; line-height: 30px; }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between p-4 selection:bg-teal-500 selection:text-slate-950">
@@ -88,7 +100,7 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
         <i data-lucide="wind" class="w-5 h-5 text-slate-400"></i>
         <div class="flex items-center text-sm font-semibold text-white font-mono-tabular">
           <span id="weatherWind">-- m/s</span>
-          <!-- SVG-pil för vindriktning (hidden tills vi har data) -->
+          <!-- SVG-pil för vindriktning -->
           <svg id="windArrow" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="ml-1 hidden transition-transform duration-500 text-slate-300">
             <line x1="12" y1="5" x2="12" y2="19"></line>
             <polyline points="19 12 12 19 5 12"></polyline>
@@ -102,11 +114,16 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
       </div>
     </div>
 
+    <!-- Live Karta -->
+    <div class="w-full bg-slate-800/30 border border-slate-800/80 p-2 rounded-3xl shadow-lg backdrop-blur-sm">
+      <div id="map" class="w-full h-48 rounded-2xl z-0"></div>
+    </div>
+
   </main>
 
   <footer class="w-full max-w-md mx-auto text-center pb-4 space-y-1">
     <p class="text-xs text-slate-500 font-mono-tabular" id="updateTime">Uppdateras live</p>
-    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.12</p>
+    <p class="text-[10px] text-slate-600 font-mono tracking-wider">v2.13</p>
   </footer>
 
   <script>
@@ -155,13 +172,40 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
       turerFrom: "",
       turerSpeedKnots: 0,
       breadTs: 0,
-      breadSpeedKnots: 0
+      breadSpeedKnots: 0,
+      breadLat: null,
+      breadLng: null
     };
 
-    // Globalt väder-state
+    // --- LEAFLET KARTA INIT ---
+    let map, ferryMarker;
+    function initMap() {
+      // Centrera kartan mellan Pettu och Ulkoluoto (Zoom 14)
+      map = L.map('map', { zoomControl: false, dragging: false, scrollWheelZoom: false }).setView([60.0385, 22.9227], 14);
+      
+      // Snygg Dark Mode karta från CartoDB
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; CARTO',
+        subdomains: 'abcd',
+        maxZoom: 19
+      }).addTo(map);
+
+      // Skapa en emoji-ikon för färjan
+      const ferryIcon = L.divIcon({
+        html: '<div class="ferry-marker">🚢</div>',
+        className: '',
+        iconSize: [30, 30],
+        iconAnchor: [15, 15]
+      });
+
+      // Lägg till ikonen (startar i mitten, uppdateras strax via Firebase)
+      ferryMarker = L.marker([60.0385, 22.9227], {icon: ferryIcon}).addTo(map);
+    }
+    initMap();
+
+    // --- VÄDER & VATTENSTÅND ---
     let weatherState = { temp: null, wind: null, gust: null, dirDeg: null };
 
-    // VÄDER-HÄMTNING (Open-Meteo)
     async function fetchWeather() {
       try {
         const url = 'https://api.open-meteo.com/v1/forecast?latitude=60.04&longitude=22.92&current=temperature_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m&wind_speed_unit=ms';
@@ -173,7 +217,6 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
           weatherState.wind = data.current.wind_speed_10m.toFixed(1);
           weatherState.gust = data.current.wind_gusts_10m ? data.current.wind_gusts_10m.toFixed(1) : weatherState.wind;
           weatherState.dirDeg = data.current.wind_direction_10m;
-          
           renderWeather();
         }
       } catch (error) {
@@ -183,21 +226,15 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
 
     function renderWeather() {
       if (weatherState.temp === null) return;
-
-      // Temperatur
       const tempSign = weatherState.temp > 0 ? "+" : "";
       document.getElementById('weatherTemp').innerText = `${tempSign}${weatherState.temp}°C`;
-
-      // Vindstyrka text
       document.getElementById('weatherWind').innerText = `${weatherState.wind} (${weatherState.gust}) m/s`;
-
-      // Roterande pil för vindriktning
+      
       const windArrow = document.getElementById('windArrow');
       windArrow.style.transform = `rotate(${weatherState.dirDeg}deg)`;
       windArrow.classList.remove('hidden');
     }
 
-    // VATTENSTÅND-HÄMTNING (FMI)
     async function fetchWaterLevel() {
       try {
         const url = 'https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature&storedquery_id=fmi::observations::mareograph::simple&place=Turku';
@@ -205,7 +242,6 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
         const text = await res.text();
         
         const matches = [...text.matchAll(/<BsWfs:ParameterValue>([^<]+)<\/BsWfs:ParameterValue>/g)];
-        
         if (matches.length > 0) {
           const latestValue = parseFloat(matches[matches.length - 1][1]);
           if (!isNaN(latestValue)) {
@@ -226,7 +262,7 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
     fetchExternalData();
     setInterval(fetchExternalData, 30 * 60 * 1000);
 
-    // DATABAS-LYSSNARE
+    // --- DATABAS-LYSSNARE ---
     db.ref(dbPathLogs).on('value', snapshot => {
       let totalVehicles = 0;
       if (snapshot.exists()) {
@@ -258,6 +294,8 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
         const val = child.val();
         state.breadTs = val.ts || 0;
         state.breadSpeedKnots = (val.speed || 0) * 1.94384; 
+        state.breadLat = val.lat || null;  // Nytt: Fånga latitud
+        state.breadLng = val.lng || null;  // Nytt: Fånga longitud
       });
       evaluateAndRender();
     });
@@ -286,13 +324,21 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
             lang = i18n[currentLang];
             
       let rawSpeed = parseFloat(data.avgSpeedKnots || 0);
-      
       let isMoving = rawSpeed >= 1.5;
       let displaySpeed = isMoving ? rawSpeed.toFixed(1) : "0.0";
       
       const fromLoc = (data.from || "").toLowerCase();
       const nowMs = Date.now();
       const isOffline = isMoving && (nowMs - data.ts > 600000); 
+
+      // --- Uppdatera kartan ---
+      if (state.breadLat && state.breadLng && ferryMarker) {
+        ferryMarker.setLatLng([state.breadLat, state.breadLng]);
+        // Centrera kartan mjukt runt färjan om den rör sig (frivilligt men snyggt)
+        if(isMoving) {
+          map.panTo([state.breadLat, state.breadLng], { animate: true, duration: 1 });
+        }
+      }
 
       let turerTimeStr = new Date(state.turerTs).toLocaleTimeString('sv-FI', { hour: '2-digit', minute: '2-digit' });
       let timePrefix = currentLang === 'sv' ? 'kl.' : 'klo';
@@ -339,6 +385,7 @@ v2.8 - Återinförde Pendel-logiken för ankomstbrygga.
       document.getElementById('langBtn').innerText = currentLang === 'sv' ? '🇸🇪 SV' : '🇫🇮 FI';
       document.getElementById('speedLabel').innerText = lang.speed;
       document.getElementById('vehiclesLabel').innerText = lang.vehicles;
+      renderWeather(); 
       evaluateAndRender();
     }
 

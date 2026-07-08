@@ -55,13 +55,13 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.29</p>
-    <p>Senast uppdaterad: <span id="updateTime">--</span></p>
+    <p>Version 2.32</p>
+    <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
   <script>
     const rulesData = {
-        sv: { title: "Regler för färjtrafik", close: "Stäng", items: ["Utryckningsfordon och tung trafik kan orsaka ändringar i tidtabellen.", "Dåligt väder tai tekniska fel kan försena färjan.", "Turen körs enbart vid behov.", "Retur till Pettu enligt tidtabell.", "Släck strålkastarna vid färjfästet så föraren inte bländas.", "Se till att ditt fordon inte läcker bränsle eller olja på däck.", "Kör ombord först när bommen är helt uppfälld.", "Höger fil: Lätta fordon. Mittenfilen: Endast tunga fordon.", "Stäng av motorn, släck ljusen och applicera handbromsen.", "Meddela axel- och totalvikt på begäran.", "Farligt gods måste meddelas till föraren innan ombordkörning.", "Kör i land först när det röda ljuset har släckts.", "MC/moped/cyckelförare måste se till att de hålls upprätt.", "Rökning förbjuden på däck.", "Följ färjeförarens instruktioner."] },
+        sv: { title: "Regler för färjtrafik", close: "Stäng", items: ["Utryckningsfordon och tung trafik kan orsaka ändringar i tidtabellen.", "Dåligt väder eller tekniska fel kan försena färjan.", "Turen körs enbart vid behov.", "Retur till Pettu enligt tidtabell.", "Släck strålkastarna vid färjfästet så föraren inte bländas.", "Se till att ditt fordon inte läcker bränsle eller olja på däck.", "Kör ombord först när bommen är helt uppfälld.", "Höger fil: Lätta fordon. Mittenfilen: Endast tunga fordon.", "Stäng av motorn, släck ljusen och applicera handbromsen.", "Meddela axel- och totalvikt på begäran.", "Farligt gods måste meddelas till föraren innan ombordkörning.", "Kör i land först när det röda ljuset har släckts.", "MC/moped/cykelförare måste se till att de hålls upprätt.", "Rökning förbjuden på däck.", "Följ färjeförarens instruktioner."] },
         fi: { title: "Lossiliikenteen ohjeistus", close: "Sulje", items: ["Hälytysajosta ja raskaan liikenteen kuljetuksesta johtuen voidaan poiketa aikataulusta.", "Huono sää, moottorivika ja huoltotoimenpiteet voivat aiheuttaa muutoksia.", "Aikataulun mukainen vuoro ajetaan vain, jos rannalla on matkustajia.", "Lossi palaa Pettuun niin että ehtii seuraavaan vuoroon.", "Ajovalot on sammutettava rantautuessa.", "Varmista ettei ajoneuvosta valu polttoainetta.", "Ajo lossille vasta kun puomi on täysin ylhäällä.", "Oikea kaista: henkilöautot. Keskikaista: raskas liikenne.", "Sammuta moottori, ajovalot ja laita käsijarru.", "Ilmoita akseli-, teli- ja kokonaispaino pyydettäessä.", "Vaarallisten aineiden kuljetuksesta on ilmoitettava etukäteen.", "Poistuminen punaisen valon sammuttua.", "Kaksipyöräisten pystyssä pysymisestä on huolehdittava.", "Tupakointi kielletty kannella.", "Kuljettajan ohjeita on noudatettava."] },
         en: { title: "Ferry Traffic Regulations", close: "Close", items: ["Schedule may change due to emergency or heavy traffic.", "Bad weather or engine issues may delay the ferry.", "Scheduled trips only if passengers are present.", "Return to Pettu as per schedule.", "Turn off headlights when landing.", "Ensure vehicle does not leak fuel.", "Drive on only when the gate is up.", "Right lane: Passenger cars. Middle: Heavy vehicles.", "Turn off engine, lights and use handbrake.", "Report axle/total weight if asked.", "Notify driver about hazardous materials.", "Exit only after red light is off.", "Motorcyclists: keep vehicle upright.", "No smoking on deck.", "Follow the ferry driver's instructions."] }
     };
@@ -111,12 +111,16 @@
     }
     fetchWeather();
 
+    // Uppdatera klockslaget när data tas emot
+    function updateLastSeen() {
+        document.getElementById('updateTime').innerText = new Date().toLocaleTimeString();
+    }
+
     // Initiera UI
     document.getElementById('langBtn').innerText = flags[currentLang] + " " + currentLang.toUpperCase();
     document.getElementById('statusText').innerText = dict[currentLang].status;
     document.getElementById('carLabel').innerText = dict[currentLang].car;
     document.getElementById('tripLabel').innerText = dict[currentLang].trip;
-    document.getElementById('updateTime').innerText = new Date().toLocaleTimeString();
 
     // Firebase
     firebase.initializeApp({
@@ -126,8 +130,16 @@
     
     const db = firebase.database();
     const today = new Date().toISOString().split('T')[0];
-    db.ref(`days/${today}/logs`).on('value', s => document.getElementById('carCount').innerText = Object.values(s.val()||{}).reduce((a,b)=>a+(b.delta||0),0));
-    db.ref(`turer/${today}`).on('value', s => document.getElementById('tripCount').innerText = s.numChildren());
+    
+    db.ref(`days/${today}/logs`).on('value', s => {
+        document.getElementById('carCount').innerText = Object.values(s.val()||{}).reduce((a,b)=>a+(b.delta||0),0);
+        updateLastSeen();
+    });
+    
+    db.ref(`turer/${today}`).on('value', s => {
+        document.getElementById('tripCount').innerText = s.numChildren();
+        updateLastSeen();
+    });
 
     // Karta
     const map = L.map('map', { zoomControl: false, dragging: false }).setView([60.0385, 22.9227], 14);

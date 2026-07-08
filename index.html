@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja</title>
+  <title>Pettu Färja - Live</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -44,25 +44,24 @@
   <div id="rulesModal" class="hidden fixed inset-0 bg-slate-900/95 z-50 p-6 overflow-y-auto">
     <div class="max-w-md mx-auto">
       <div class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
-        <h2 class="text-xl font-bold">Lossiliikenteen ohjeistus</h2>
+        <h2 class="text-xl font-bold">Regler / Säännöt / Rules</h2>
         <button onclick="toggleRules()" class="text-2xl">✕</button>
       </div>
       <div class="space-y-6 text-sm text-slate-300">
         <section>
-            <h3 class="font-bold text-emerald-400 mb-2">Säkerhet & Regler</h3>
+            <h3 class="font-bold text-emerald-400 mb-2">Säkerhet / Turvallisuus</h3>
             <ul class="list-disc ml-4 space-y-1">
-                <li>Släck helljus vid landning.</li>
-                <li>Stäng av motor och dra handbroms.</li>
-                <li>Ingen rökning på däck.</li>
-                <li>Vänta på grönt ljus/öppen bom.</li>
+                <li>Släck helljus vid landning / Sammuta ajovalot</li>
+                <li>Stäng av motor & handbroms / Sammuta moottori</li>
+                <li>Ingen rökning / Tupakointi kielletty</li>
             </ul>
         </section>
         <section>
-            <h3 class="font-bold text-emerald-400 mb-2">Trafik</h3>
+            <h3 class="font-bold text-emerald-400 mb-2">Trafik / Liikenne</h3>
             <ul class="list-disc ml-4 space-y-1">
-                <li>Höger fil: Lätta fordon.</li>
-                <li>Mitten: Endast tunga fordon.</li>
-                <li>Tung trafik och utryckning prioriteras.</li>
+                <li>Höger fil: Lätta fordon</li>
+                <li>Mitten: Endast tunga fordon</li>
+                <li>Tung trafik prioriteras</li>
             </ul>
         </section>
       </div>
@@ -76,20 +75,56 @@
   </footer>
 
   <script>
-    function toggleRules() { document.getElementById('rulesModal').classList.toggle('hidden'); }
-
-    // (Här behåller du din befintliga logik för Firebase och språkbyte...)
     lucide.createIcons();
     const langs = ['sv', 'fi', 'en'];
     const flags = { 'sv': '🇸🇪', 'fi': '🇫🇮', 'en': '🇬🇧' };
     let currentLang = localStorage.getItem('lang') || 'sv';
     
+    const dict = {
+      sv: { status: "Ansluter till färjan...", car: "bilar", trip: "turer" },
+      fi: { status: "Yhdistetään lossiin...", car: "autoa", trip: "vuoroa" },
+      en: { status: "Connecting to ferry...", car: "cars", trip: "trips" }
+    };
+
+    function toggleRules() { document.getElementById('rulesModal').classList.toggle('hidden'); }
     function nextLang() {
         currentLang = langs[(langs.indexOf(currentLang) + 1) % langs.length];
         localStorage.setItem('lang', currentLang);
         location.reload();
     }
+
+    // Väder
+    async function fetchWeather() {
+        try {
+            const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=60.04&longitude=22.92&current=temperature_2m,wind_speed_10m');
+            const data = await res.json();
+            document.getElementById('weatherTemp').innerText = Math.round(data.current.temperature_2m) + "°C";
+            document.getElementById('weatherWind').innerText = data.current.wind_speed_10m + " m/s";
+        } catch(e) { console.error(e); }
+    }
+    fetchWeather();
+
+    // Initiera UI
     document.getElementById('langBtn').innerText = flags[currentLang] + " " + currentLang.toUpperCase();
+    document.getElementById('statusText').innerText = dict[currentLang].status;
+    document.getElementById('carLabel').innerText = dict[currentLang].car;
+    document.getElementById('tripLabel').innerText = dict[currentLang].trip;
+    document.getElementById('updateTime').innerText = new Date().toLocaleTimeString();
+
+    // Firebase
+    firebase.initializeApp({
+      apiKey: "AIzaSyDregBlw1hjcHotJAk8938xXAjQKbHXS1Q",
+      databaseURL: "https://fordonsraknare-default-rtdb.europe-west1.firebasedatabase.app"
+    });
+    
+    const db = firebase.database();
+    const today = new Date().toISOString().split('T')[0];
+    db.ref(`days/${today}/logs`).on('value', s => document.getElementById('carCount').innerText = Object.values(s.val()||{}).reduce((a,b)=>a+(b.delta||0),0));
+    db.ref(`turer/${today}`).on('value', s => document.getElementById('tripCount').innerText = s.numChildren());
+
+    // Karta
+    const map = L.map('map', { zoomControl: false, dragging: false }).setView([60.0385, 22.9227], 14);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
   </script>
 </body>
 </html>

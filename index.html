@@ -1,4 +1,4 @@
-<! DOCTYPE html>
+<!DOCTYPE html>
 <html lang="sv">
 <head>
   <meta charset="UTF-8">
@@ -43,33 +43,16 @@
   <div id="rulesModal" class="hidden fixed inset-0 bg-slate-900/95 z-[9999] p-6 overflow-y-auto">
     <div class="max-w-md mx-auto">
       <div class="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
-        <h2 class="text-xl font-bold">Regler / Säännöt / Rules</h2>
+        <h2 id="rulesTitle" class="text-xl font-bold"></h2>
         <button onclick="toggleRules()" class="text-2xl">✕</button>
       </div>
-      <div class="space-y-6 text-sm text-slate-300">
-        <section>
-            <h3 class="font-bold text-emerald-400 mb-2">Säkerhet / Turvallisuus</h3>
-            <ul class="list-disc ml-4 space-y-1">
-                <li>Släck helljus vid landning / Sammuta ajovalot</li>
-                <li>Stäng av motor & handbroms / Sammuta moottori</li>
-                <li>Ingen rökning / Tupakointi kielletty</li>
-            </ul>
-        </section>
-        <section>
-            <h3 class="font-bold text-emerald-400 mb-2">Trafik / Liikenne</h3>
-            <ul class="list-disc ml-4 space-y-1">
-                <li>Höger fil: Lätta fordon</li>
-                <li>Mitten: Endast tunga fordon</li>
-                <li>Tung trafik prioriteras</li>
-            </ul>
-        </section>
-      </div>
-      <button onclick="toggleRules()" class="mt-8 w-full bg-emerald-600 py-3 rounded-xl font-bold text-white">Stäng</button>
+      <div id="rulesContent" class="space-y-6 text-sm text-slate-300"></div>
+      <button onclick="toggleRules()" class="mt-8 w-full bg-emerald-600 py-3 rounded-xl font-bold text-white">Stäng / Sulje / Close</button>
     </div>
   </div>
 
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.25</p>
+    <p>Version 2.26</p>
     <p>Senast uppdaterad: <span id="updateTime">--</span></p>
   </footer>
 
@@ -80,9 +63,15 @@
     let currentLang = localStorage.getItem('lang') || 'sv';
     
     const dict = {
-      sv: { status: "Ansluter till färjan...", car: "bilar", trip: "turer" },
-      fi: { status: "Yhdistetään lossiin...", car: "autoa", trip: "vuoroa" },
-      en: { status: "Connecting to ferry...", car: "cars", trip: "trips" }
+      sv: { status: "Ansluter till färjan...", car: "bilar", trip: "turer", rulesTitle: "Regler",
+            sec: "Säkerhet", r1: "Släck helljus vid landning", r2: "Stäng av motor & handbroms", r3: "Ingen rökning",
+            traf: "Trafik", r4: "Höger fil: Lätta fordon", r5: "Mitten: Endast tunga fordon", r6: "Tung trafik prioriteras" },
+      fi: { status: "Yhdistetään lossiin...", car: "autoa", trip: "vuoroa", rulesTitle: "Säännöt",
+            sec: "Turvallisuus", r1: "Sammuta ajovalot", r2: "Sammuta moottori ja käsijarru", r3: "Tupakointi kielletty",
+            traf: "Liikenne", r4: "Oikea kaista: Henkilöautot", r5: "Keskikaista: Vain raskas liikenne", r6: "Raskas liikenne etusijalla" },
+      en: { status: "Connecting to ferry...", car: "cars", trip: "trips", rulesTitle: "Rules",
+            sec: "Safety", r1: "Turn off high beams", r2: "Turn off engine & handbrake", r3: "No smoking",
+            traf: "Traffic", r4: "Right lane: Passenger cars", r5: "Middle: Heavy vehicles only", r6: "Heavy traffic priority" }
     };
 
     function toggleRules() { 
@@ -90,6 +79,14 @@
         const mapWrap = document.getElementById('mapWrapper');
         modal.classList.toggle('hidden');
         mapWrap.style.display = modal.classList.contains('hidden') ? 'block' : 'none';
+        
+        const d = dict[currentLang];
+        document.getElementById('rulesTitle').innerText = d.rulesTitle;
+        document.getElementById('rulesContent').innerHTML = `
+            <section><h3 class="font-bold text-emerald-400 mb-2">${d.sec}</h3>
+            <ul class="list-disc ml-4 space-y-1"><li>${d.r1}</li><li>${d.r2}</li><li>${d.r3}</li></ul></section>
+            <section><h3 class="font-bold text-emerald-400 mb-2">${d.traf}</h3>
+            <ul class="list-disc ml-4 space-y-1"><li>${d.r4}</li><li>${d.r5}</li><li>${d.r6}</li></ul></section>`;
     }
 
     function nextLang() {
@@ -98,27 +95,13 @@
         location.reload();
     }
 
-    async function fetchWeather() {
-        try {
-            const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=60.04&longitude=22.92&current=temperature_2m,wind_speed_10m');
-            const data = await res.json();
-            document.getElementById('weatherTemp').innerText = Math.round(data.current.temperature_2m) + "°C";
-            document.getElementById('weatherWind').innerText = data.current.wind_speed_10m + " m/s";
-        } catch(e) { console.error(e); }
-    }
-    fetchWeather();
-
+    // UI & Firebase Init
     document.getElementById('langBtn').innerText = flags[currentLang] + " " + currentLang.toUpperCase();
     document.getElementById('statusText').innerText = dict[currentLang].status;
     document.getElementById('carLabel').innerText = dict[currentLang].car;
     document.getElementById('tripLabel').innerText = dict[currentLang].trip;
-    document.getElementById('updateTime').innerText = new Date().toLocaleTimeString();
 
-    firebase.initializeApp({
-      apiKey: "DIN_API_NYCKEL_HÄR",
-      databaseURL: "https://fordonsraknare-default-rtdb.europe-west1.firebasedatabase.app"
-    });
-    
+    firebase.initializeApp({ apiKey: "DIN_API_NYCKEL_HÄR", databaseURL: "https://fordonsraknare-default-rtdb.europe-west1.firebasedatabase.app" });
     const db = firebase.database();
     const today = new Date().toISOString().split('T')[0];
     db.ref(`days/${today}/logs`).on('value', s => document.getElementById('carCount').innerText = Object.values(s.val()||{}).reduce((a,b)=>a+(b.delta||0),0));

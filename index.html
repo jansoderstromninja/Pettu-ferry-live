@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pettu Färja - Live-status</title>
+  <title>Pettu Färja</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
@@ -17,62 +17,72 @@
 </head>
 <body class="p-4">
   <header class="flex justify-between items-center w-full max-w-md mx-auto mb-6">
-    <div class="flex items-center space-x-2"><div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div><span class="text-xs uppercase text-slate-400">Live</span></div>
-    <button id="langBtn" onclick="toggleLanguage()" class="bg-slate-800 text-sm px-3 py-1 rounded-full border border-slate-700 hover:bg-slate-700 transition">🇸🇪 SV / 🇫🇮 FI</button>
+    <div class="flex items-center space-x-2"><div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div><span class="text-xs uppercase text-slate-400">LIVE</span></div>
+    <button id="langBtn" onclick="nextLang()" class="bg-slate-800 text-xs px-3 py-1 rounded-full border border-slate-700 hover:bg-slate-700 transition">🌐 Language</button>
   </header>
 
   <main class="w-full max-w-md mx-auto space-y-4">
     <div class="w-full bg-slate-800 p-2 rounded-3xl"><div id="map" class="w-full h-48 rounded-2xl"></div></div>
     
     <div class="bg-slate-800 p-6 rounded-3xl text-center shadow-xl">
-      <h1 id="statusText" class="text-xl font-bold mb-2">Ansluter till färjan...</h1>
+      <h1 id="statusText" class="text-lg font-bold mb-1">Ansluter till färjan...</h1>
       <span id="speedValue" class="text-4xl font-bold text-emerald-400 font-mono-tabular">0.0</span> <span class="text-slate-400">kn</span>
     </div>
 
-    <div class="bg-slate-800 p-4 rounded-3xl grid grid-cols-3 gap-2 text-center text-xs">
-      <div>🌡️<br><span id="weatherTemp" class="font-mono-tabular">--</span></div>
-      <div>💨<br><div class="flex items-center justify-center"><span id="weatherWind" class="font-mono-tabular">--</span><svg id="windArrow" class="ml-1 w-4 h-4 transition-transform text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M19 12l-7 7-7-7"/></svg></div></div>
-      <div>🌊<br><span id="waterLevel" class="font-mono-tabular">--</span></div>
+    <!-- Info-grid: Väder, Bilar, Turer -->
+    <div class="bg-slate-800 p-4 rounded-3xl grid grid-cols-2 gap-4 text-center text-xs">
+      <div>🌡️ <span id="weatherTemp" class="font-mono-tabular">--</span></div>
+      <div>💨 <span id="weatherWind" class="font-mono-tabular">--</span></div>
+      <div>🚗 <span id="carCount" class="font-mono-tabular font-bold text-emerald-400">0</span> <span id="carLabel">bilar</span></div>
+      <div>🚢 <span id="tripCount" class="font-mono-tabular font-bold text-emerald-400">0</span> <span id="tripLabel">turer</span></div>
     </div>
   </main>
 
-  <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono">
-    <p>Version 2.22 • Senaste signal: <span id="updateTime">--</span></p>
-  </footer>
-
   <script>
     lucide.createIcons();
-    // Din befintliga Firebase-konfig här
+    
+    // Språklogik
+    const langs = ['sv', 'fi', 'en'];
+    let currentLang = localStorage.getItem('lang') || 'sv';
+    const dict = {
+      sv: { status: "Ansluter till färjan...", car: "bilar", trip: "turer" },
+      fi: { status: "Yhdistetään lossiin...", car: "autoa", trip: "vuoroa" },
+      en: { status: "Connecting to ferry...", car: "cars", trip: "trips" }
+    };
+
+    function nextLang() {
+        let idx = langs.indexOf(currentLang);
+        currentLang = langs[(idx + 1) % langs.length];
+        localStorage.setItem('lang', currentLang);
+        location.reload();
+    }
+
+    // Firebase (fyll i din config här)
     firebase.initializeApp({
       apiKey: "AIzaSyDregBlw1hjcHotJAk8938xXAjQKbHXS1Q",
       databaseURL: "https://fordonsraknare-default-rtdb.europe-west1.firebasedatabase.app"
     });
+    const db = firebase.database();
+    const today = new Date().toISOString().split('T')[0];
 
-    // Väder & Vatten
-    async function updateExternalData() {
-        try {
-            const wRes = await fetch('https://api.open-meteo.com/v1/forecast?latitude=60.04&longitude=22.92&current=temperature_2m,wind_speed_10m,wind_direction_10m&wind_speed_unit=ms');
-            const wData = await wRes.json();
-            document.getElementById('weatherTemp').innerText = Math.round(wData.current.temperature_2m) + "°C";
-            document.getElementById('weatherWind').innerText = wData.current.wind_speed_10m + " m/s";
-            document.getElementById('windArrow').style.transform = `rotate(${wData.current.wind_direction_10m}deg)`;
-            
-            const fRes = await fetch('https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature&storedquery_id=fmi::observations::mareograph::simple&place=Turku');
-            const fText = await fRes.text();
-            const val = fText.match(/<BsWfs:ParameterValue>([\d.-]+)<\/BsWfs:ParameterValue>/g);
-            document.getElementById('waterLevel').innerText = val ? Math.round(parseFloat(val.pop().replace(/<\/?.*?>/g, ''))/10) + "cm" : "--";
-        } catch(e) { console.error(e); }
-    }
-    updateExternalData();
+    // Lyssna på data
+    db.ref(`days/${today}/logs`).on('value', snap => {
+        let count = 0;
+        snap.forEach(c => count += c.val().delta || 0);
+        document.getElementById('carCount').innerText = count;
+    });
 
-    // Språk
-    function toggleLanguage() {
-        let lang = localStorage.getItem('lang') === 'fi' ? 'sv' : 'fi';
-        localStorage.setItem('lang', lang);
-        location.reload();
-    }
-    
-    // Karta (Koppla på dina markers här som tidigare)
+    db.ref(`turer/${today}`).on('value', snap => {
+        document.getElementById('tripCount').innerText = snap.numChildren();
+    });
+
+    // Uppdatera texter
+    document.getElementById('statusText').innerText = dict[currentLang].status;
+    document.getElementById('carLabel').innerText = dict[currentLang].car;
+    document.getElementById('tripLabel').innerText = dict[currentLang].trip;
+    document.getElementById('langBtn').innerText = currentLang.toUpperCase();
+
+    // Karta
     const map = L.map('map', { zoomControl: false, dragging: false }).setView([60.0385, 22.9227], 14);
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
   </script>

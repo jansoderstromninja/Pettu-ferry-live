@@ -47,17 +47,23 @@
         <h2 id="rulesTitle" class="text-xl font-bold text-emerald-400"></h2>
         <button onclick="toggleRules()" class="p-2 bg-slate-800 rounded-full">✕</button>
       </div>
-      <div id="rulesContent" class="flex-1 overflow-y-auto pr-2 space-y-4 text-sm text-slate-300">
+      <!-- Listan injiceras här via JS med riktiga punkter -->
+      <div id="rulesContent" class="flex-1 overflow-y-auto pr-2 text-sm text-slate-300">
       </div>
-      <button onclick="toggleRules()" class="mt-4 w-full bg-emerald-600 py-4 rounded-2xl font-bold text-white">Stäng</button>
+      <button id="rulesCloseBtn" onclick="toggleRules()" class="mt-4 w-full bg-emerald-600 py-4 rounded-2xl font-bold text-white">Stäng</button>
     </div>
   </div>
+  
+  <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
+    <p>Version 2.29</p>
+    <p>Senast uppdaterad: <span id="updateTime">--</span></p>
+  </footer>
 
   <script>
     const rulesData = {
-        sv: { title: "Lossiliikenteen ohjeistus", items: ["Hälytysajo ja raskas liikenne voi aiheuttaa muutoksia aikatauluun.", "Huono sää/tekniset viat voivat viivästyttää lossia.", "Vuoro ajetaan vain tarvittaessa.", "Palaa Pettuun aikataulun mukaan.", "Sammuta ajovalot rantautuessa.", "Varmista ettei ajoneuvo vuoda öljyä.", "Ajo lossille vasta kun puomi ylhäällä.", "Oikea kaista: henkilöautot. Keskikaista: raskas liikenne.", "Sammuta moottori ja laita käsijarru.", "Ilmoita akselipaino tarvittaessa.", "Vaaralliset aineet: ilmoita ennen ajoa.", "Poistuminen vasta kun valot sammuneet.", "Kaksipyöräiset: huolehdi pystyssä pysymisestä.", "Tupakointi kielletty kannella.", "Kuljettajan ohjeita on noudatettava."] },
-        fi: { title: "Lossiliikenteen ohjeistus", items: ["Hälytysajosta ja raskaan liikenteen kuljetuksesta johtuen voidaan poiketa aikataulusta.", "Huono sää, moottorivika ja huoltotoimenpiteet voivat aiheuttaa muutoksia.", "Aikataulun mukainen vuoro ajetaan vain, jos rannalla on matkustajia.", "Lossi palaa Pettuun niin että ehtii seuraavaan vuoroon.", "Ajovalot on sammutettava rantautuessa.", "Varmista ettei ajoneuvosta valu polttoainetta.", "Ajo lossille vasta kun puomi on täysin ylhäällä.", "Oikea kaista: henkilöautot. Keskikaista: raskas liikenne.", "Sammuta moottori, ajovalot ja laita käsijarru.", "Ilmoita akseli-, teli- ja kokonaispaino pyydettäessä.", "Vaarallisten aineiden kuljetuksesta on ilmoitettava etukäteen.", "Poistuminen punaisen valon sammuttua.", "Kaksipyöräisten pystyssä pysymisestä on huolehdittava.", "Tupakointi kielletty kannella.", "Kuljettajan ohjeita on noudatettava."] },
-        en: { title: "Ferry Traffic Regulations", items: ["Schedule may change due to emergency or heavy traffic.", "Bad weather or engine issues may delay the ferry.", "Scheduled trips only if passengers are present.", "Return to Pettu as per schedule.", "Turn off headlights when landing.", "Ensure vehicle does not leak fuel.", "Drive on only when boom is up.", "Right lane: Passenger cars. Middle: Heavy vehicles.", "Turn off engine, lights and use handbrake.", "Report axle/total weight if asked.", "Notify driver about hazardous materials.", "Exit only after red light is off.", "Motorcyclists: keep vehicle upright.", "No smoking on deck.", "Follow the ferry driver's instructions."] }
+        sv: { title: "Lossiliikenteen ohjeistus", close: "Stäng", items: ["Hälytysajo ja raskas liikenne voi aiheuttaa muutoksia aikatauluun.", "Huono sää/tekniset viat voivat viivästyttää lossia.", "Vuoro ajetaan vain tarvittaessa.", "Palaa Pettuun aikataulun mukaan.", "Sammuta ajovalot rantautuessa.", "Varmista ettei ajoneuvo vuoda öljyä.", "Ajo lossille vasta kun puomi ylhäällä.", "Oikea kaista: henkilöautot. Keskikaista: raskas liikenne.", "Sammuta moottori ja laita käsijarru.", "Ilmoita akselipaino tarvittaessa.", "Vaaralliset aineet: ilmoita ennen ajoa.", "Poistuminen vasta kun valot sammuneet.", "Kaksipyöräiset: huolehdi pystyssä pysymisestä.", "Tupakointi kielletty kannella.", "Kuljettajan ohjeita on noudatettava."] },
+        fi: { title: "Lossiliikenteen ohjeistus", close: "Sulje", items: ["Hälytysajosta ja raskaan liikenteen kuljetuksesta johtuen voidaan poiketa aikataulusta.", "Huono sää, moottorivika ja huoltotoimenpiteet voivat aiheuttaa muutoksia.", "Aikataulun mukainen vuoro ajetaan vain, jos rannalla on matkustajia.", "Lossi palaa Pettuun niin että ehtii seuraavaan vuoroon.", "Ajovalot on sammutettava rantautuessa.", "Varmista ettei ajoneuvosta valu polttoainetta.", "Ajo lossille vasta kun puomi on täysin ylhäällä.", "Oikea kaista: henkilöautot. Keskikaista: raskas liikenne.", "Sammuta moottori, ajovalot ja laita käsijarru.", "Ilmoita akseli-, teli- ja kokonaispaino pyydettäessä.", "Vaarallisten aineiden kuljetuksesta on ilmoitettava etukäteen.", "Poistuminen punaisen valon sammuttua.", "Kaksipyöräisten pystyssä pysymisestä on huolehdittava.", "Tupakointi kielletty kannella.", "Kuljettajan ohjeita on noudatettava."] },
+        en: { title: "Ferry Traffic Regulations", close: "Close", items: ["Schedule may change due to emergency or heavy traffic.", "Bad weather or engine issues may delay the ferry.", "Scheduled trips only if passengers are present.", "Return to Pettu as per schedule.", "Turn off headlights when landing.", "Ensure vehicle does not leak fuel.", "Drive on only when boom is up.", "Right lane: Passenger cars. Middle: Heavy vehicles.", "Turn off engine, lights and use handbrake.", "Report axle/total weight if asked.", "Notify driver about hazardous materials.", "Exit only after red light is off.", "Motorcyclists: keep vehicle upright.", "No smoking on deck.", "Follow the ferry driver's instructions."] }
     };
 
     function toggleRules() { 
@@ -68,10 +74,64 @@
         
         const lang = localStorage.getItem('lang') || 'sv';
         document.getElementById('rulesTitle').innerText = rulesData[lang].title;
-        document.getElementById('rulesContent').innerHTML = rulesData[lang].items.map(i => `<p class="border-b border-slate-800 pb-2">${i}</p>`).join('');
+        document.getElementById('rulesCloseBtn').innerText = rulesData[lang].close;
+        
+        // Riktig punktlista med mellanrum
+        document.getElementById('rulesContent').innerHTML = 
+            `<ul class="list-disc ml-5 space-y-3">` + 
+            rulesData[lang].items.map(i => `<li class="border-b border-slate-800 pb-3 pl-1">${i}</li>`).join('') + 
+            `</ul>`;
     }
 
-    // ... (resten av din kod)
+    lucide.createIcons();
+    const langs = ['sv', 'fi', 'en'];
+    const flags = { 'sv': '🇸🇪', 'fi': '🇫🇮', 'en': '🇬🇧' };
+    let currentLang = localStorage.getItem('lang') || 'sv';
+    
+    const dict = {
+      sv: { status: "Ansluter till färjan...", car: "bilar", trip: "turer" },
+      fi: { status: "Yhdistetään lossiin...", car: "autoa", trip: "vuoroa" },
+      en: { status: "Connecting to ferry...", car: "cars", trip: "trips" }
+    };
+
+    function nextLang() {
+        currentLang = langs[(langs.indexOf(currentLang) + 1) % langs.length];
+        localStorage.setItem('lang', currentLang);
+        location.reload();
+    }
+
+    // Väder
+    async function fetchWeather() {
+        try {
+            const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=60.04&longitude=22.92&current=temperature_2m,wind_speed_10m');
+            const data = await res.json();
+            document.getElementById('weatherTemp').innerText = Math.round(data.current.temperature_2m) + "°C";
+            document.getElementById('weatherWind').innerText = data.current.wind_speed_10m + " m/s";
+        } catch(e) { console.error(e); }
+    }
+    fetchWeather();
+
+    // Initiera UI
+    document.getElementById('langBtn').innerText = flags[currentLang] + " " + currentLang.toUpperCase();
+    document.getElementById('statusText').innerText = dict[currentLang].status;
+    document.getElementById('carLabel').innerText = dict[currentLang].car;
+    document.getElementById('tripLabel').innerText = dict[currentLang].trip;
+    document.getElementById('updateTime').innerText = new Date().toLocaleTimeString();
+
+    // Firebase
+    firebase.initializeApp({
+      apiKey: "DIN_API_NYCKEL_HÄR",
+      databaseURL: "https://fordonsraknare-default-rtdb.europe-west1.firebasedatabase.app"
+    });
+    
+    const db = firebase.database();
+    const today = new Date().toISOString().split('T')[0];
+    db.ref(`days/${today}/logs`).on('value', s => document.getElementById('carCount').innerText = Object.values(s.val()||{}).reduce((a,b)=>a+(b.delta||0),0));
+    db.ref(`turer/${today}`).on('value', s => document.getElementById('tripCount').innerText = s.numChildren());
+
+    // Karta
+    const map = L.map('map', { zoomControl: false, dragging: false }).setView([60.0385, 22.9227], 14);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
   </script>
 </body>
 </html>

@@ -52,7 +52,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.39</p>
+    <p>Version 2.40</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -85,9 +85,9 @@
     let currentLang = localStorage.getItem('lang') || 'sv';
     
     const statusDict = {
-        sv: { movingPettu: "Mot Pettu", movingMainland: "Mot Särkisalo", dockedPettu: "Vid kaj (Pettu)", dockedMainland: "Vid kaj (Särkisalo)", moving: "Under körning", error: "Väntar på data..." },
-        fi: { movingPettu: "Kohti Pettua", movingMainland: "Kohti Särkisaloa", dockedPettu: "Rannassa (Pettu)", dockedMainland: "Rannassa (Särkisalo)", moving: "Liikenteessä", error: "Odottaa tietoja..." },
-        en: { movingPettu: "Towards Pettu", movingMainland: "Towards Särkisalo", dockedPettu: "Docked (Pettu)", dockedMainland: "Docked (Särkisalo)", moving: "Moving", error: "Waiting for data..." }
+        sv: { movingPettu: "Mot Pettu", movingMainland: "Mot Utö", dockedPettu: "På Pettu", dockedMainland: "På Utö", moving: "Under körning", error: "Väntar på data..." },
+        fi: { movingPettu: "Kohti Pettua", movingMainland: "Kohti Utötä", dockedPettu: "Petussa", dockedMainland: "Utössä", moving: "Liikenteessä", error: "Odottaa tietoja..." },
+        en: { movingPettu: "Towards Pettu", movingMainland: "Towards Utö", dockedPettu: "At Pettu", dockedMainland: "At Utö", moving: "Moving", error: "Waiting for data..." }
     };
 
     const dict = {
@@ -102,13 +102,20 @@
         location.reload();
     }
 
-    // Väder - Tvingar API:et att skicka meter per sekund
+    // Väder - Tvingar API:et att skicka m/s och hämtar byar + riktning
     async function fetchWeather() {
         try {
-            const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=60.04&longitude=22.92&current=temperature_2m,wind_speed_10m&wind_speed_unit=ms');
+            const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=60.04&longitude=22.92&current=temperature_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m&wind_speed_unit=ms');
             const data = await res.json();
+            
             document.getElementById('weatherTemp').innerText = Math.round(data.current.temperature_2m) + "°C";
-            document.getElementById('weatherWind').innerText = data.current.wind_speed_10m.toFixed(1) + " m/s";
+            
+            const windSpeed = data.current.wind_speed_10m.toFixed(1);
+            const windGusts = data.current.wind_gusts_10m.toFixed(1);
+            const windDir = data.current.wind_direction_10m;
+            
+            // Renderar texten med en roterande pil (↓ roteras enligt grader)
+            document.getElementById('weatherWind').innerHTML = `${windSpeed} (${windGusts}) m/s <span style="display:inline-block; transform:rotate(${windDir}deg); margin-left:2px;">↓</span>`;
         } catch(e) { console.error(e); }
     }
     fetchWeather();
@@ -131,9 +138,7 @@
     
     const db = firebase.database();
     
-    // Använd lokal tidzon för att få rätt datum
     const todayDate = new Date();
-    // Kompenserar för tidszonen för att få ut rätt YYYY-MM-DD
     const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
     
     db.ref(`days/${today}/logs`).on('value', s => {
@@ -159,11 +164,10 @@
         radius: 8
     }).addTo(map);
 
-    // Variabler för riktningslogik
     let lastLat = null;
     let currentDirection = "unknown";
-    const MIDPOINT_LAT = 60.03855; // Ungefär i mitten av sundet
-    const SPEED_THRESHOLD = 1.8; // Knop. Måste köras snabbare än detta för att räknas som "i rörelse"
+    const MIDPOINT_LAT = 60.03855; 
+    const SPEED_THRESHOLD = 1.8; 
 
     // Rätt sökväg till dina breadcrumbs
     db.ref(`breadcrumbs/${today}`).orderByKey().limitToLast(1).on('value', snapshot => {
@@ -171,18 +175,14 @@
             const pos = childSnapshot.val();
             
             if (pos && pos.lat && pos.lng) {
-                // Uppdatera karta
                 ferryMarker.setLatLng([pos.lat, pos.lng]);
                 map.panTo([pos.lat, pos.lng]);
 
-                // Räkna ut fart
                 const speedMps = pos.speed || 0;
                 const speedKnots = (speedMps * 1.94384).toFixed(1);
                 
-                // Nollställ visuell fart om vi ligger under tröskelvärdet för att undvika "1.6 knop vid kaj"
                 document.getElementById('speedValue').innerText = speedKnots >= SPEED_THRESHOLD ? speedKnots : "0.0";
 
-                // Ta ut riktning om vi faktiskt rör oss
                 if (lastLat !== null && speedKnots >= SPEED_THRESHOLD) {
                     if (pos.lat < lastLat - 0.00001) {
                         currentDirection = "pettu";
@@ -193,14 +193,12 @@
                 }
                 lastLat = pos.lat;
 
-                // Är vi närmare Pettu eller Särkisalo?
                 const isPettuSide = pos.lat < MIDPOINT_LAT;
 
-                // Sätt rätt status-text
                 if (speedKnots >= SPEED_THRESHOLD) {
                     if (currentDirection === "pettu") document.getElementById('statusText').innerText = statusDict[currentLang].movingPettu;
                     else if (currentDirection === "mainland") document.getElementById('statusText').innerText = statusDict[currentLang].movingMainland;
-                    else document.getElementById('statusText').innerText = statusDict[currentLang].moving; // Fallback
+                    else document.getElementById('statusText').innerText = statusDict[currentLang].moving; 
                 } else {
                     document.getElementById('statusText').innerText = isPettuSide ? statusDict[currentLang].dockedPettu : statusDict[currentLang].dockedMainland;
                 }

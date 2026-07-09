@@ -13,6 +13,14 @@
   <style>
     body { font-family: 'Inter', sans-serif; background: #0f172a; color: white; }
     .font-mono-tabular { font-family: 'JetBrains+Mono', monospace; }
+    /* CSS för den anpassade rörliga pilen på kartan */
+    .moving-ferry-icon {
+      color: #10b981;
+      font-size: 24px;
+      font-weight: bold;
+      text-shadow: 0 0 5px rgba(0,0,0,0.5);
+      line-height: 1;
+    }
   </style>
 </head>
 <body class="p-4">
@@ -52,7 +60,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.40</p>
+    <p>Version 2.41</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -102,7 +110,6 @@
         location.reload();
     }
 
-    // Väder - Tvingar API:et att skicka m/s och hämtar byar + riktning
     async function fetchWeather() {
         try {
             const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=60.04&longitude=22.92&current=temperature_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m&wind_speed_unit=ms');
@@ -114,7 +121,6 @@
             const windGusts = data.current.wind_gusts_10m.toFixed(1);
             const windDir = data.current.wind_direction_10m;
             
-            // Renderar texten med en roterande pil (↓ roteras enligt grader)
             document.getElementById('weatherWind').innerHTML = `${windSpeed} (${windGusts}) m/s <span style="display:inline-block; transform:rotate(${windDir}deg); margin-left:2px;">↓</span>`;
         } catch(e) { console.error(e); }
     }
@@ -124,13 +130,11 @@
         document.getElementById('updateTime').innerText = new Date().toLocaleTimeString();
     }
 
-    // Initiera UI
     document.getElementById('langBtn').innerText = flags[currentLang] + " " + currentLang.toUpperCase();
     document.getElementById('statusText').innerText = statusDict[currentLang].error;
     document.getElementById('carLabel').innerText = dict[currentLang].car;
     document.getElementById('tripLabel').innerText = dict[currentLang].trip;
 
-    // Firebase
     firebase.initializeApp({
       apiKey: "AIzaSyDregBlw1hjcHotJAk8938xXAjQKbHXS1Q",
       databaseURL: "https://fordonsraknare-default-rtdb.europe-west1.firebasedatabase.app"
@@ -157,7 +161,8 @@
     
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
 
-    const ferryMarker = L.circleMarker([60.0385, 22.9227], {
+    // Initial markör (bollen vid kaj)
+    let ferryMarker = L.circleMarker([60.0385, 22.9227], {
         color: '#10b981',
         fillColor: '#10b981',
         fillOpacity: 1,
@@ -165,43 +170,92 @@
     }).addTo(map);
 
     let lastLat = null;
+    let lastLng = null;
     let currentDirection = "unknown";
+    let isMovingMode = false; // Håller koll på om vi visar boll eller pil
+    
     const MIDPOINT_LAT = 60.03855; 
     const SPEED_THRESHOLD = 1.8; 
 
-    // Rätt sökväg till dina breadcrumbs
     db.ref(`breadcrumbs/${today}`).orderByKey().limitToLast(1).on('value', snapshot => {
         snapshot.forEach(childSnapshot => {
             const pos = childSnapshot.val();
             
             if (pos && pos.lat && pos.lng) {
-                ferryMarker.setLatLng([pos.lat, pos.lng]);
-                map.panTo([pos.lat, pos.lng]);
-
                 const speedMps = pos.speed || 0;
                 const speedKnots = (speedMps * 1.94384).toFixed(1);
+                const isCurrentlyMoving = speedKnots >= SPEED_THRESHOLD;
                 
-                document.getElementById('speedValue').innerText = speedKnots >= SPEED_THRESHOLD ? speedKnots : "0.0";
-
-                if (lastLat !== null && speedKnots >= SPEED_THRESHOLD) {
-                    if (pos.lat < lastLat - 0.00001) {
-                        currentDirection = "pettu";
-                    } 
-                    else if (pos.lat > lastLat + 0.00001) {
-                        currentDirection = "mainland";
-                    }
+                // Räkna ut riktningen i grader (bara om vi rör oss och har en tidigare punkt)
+                let headingDegree = 0;
+                if (isCurrentlyMoving && lastLat !== null && lastLng !== null) {
+                    // atan2 ger vinkeln i radianer, som vi konverterar till grader och justerar för kartans norr-orientering
+                    const dy = pos.lat - lastLat;
+                    const dx = Math.cos(Math.PI/180 * lastLat) * (pos.lng - lastLng);
+                    headingDegree = Math.atan2(dx, dy) * (180 / Math.PI);
                 }
-                lastLat = pos.lat;
+
+                // Byta mellan Cirkel och Pil beroende på fart
+                if (isCurrentlyMoving && !isMovingMode) {
+                    // Ta bort bollen
+                    map.removeLayer(ferryMarker);
+                    // Skapa pilen (använder DivIcon för att kunna rotera text)
+                    const arrowIcon = L.divIcon({
+                        html: `<div style="transform: rotate(${headingDegree}deg);" class="moving-ferry-icon">➤</div>`,
+                        className: '', // Tar bort default bakgrund
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    });
+                    ferryMarker = L.marker([pos.lat, pos.lng], { icon: arrowIcon }).addTo(map);
+                    isMovingMode = true;
+                } 
+                else if (!isCurrentlyMoving && isMovingMode) {
+                    // Ta bort pilen
+                    map.removeLayer(ferryMarker);
+                    // Tillbaka till bollen
+                    ferryMarker = L.circleMarker([pos.lat, pos.lng], {
+                        color: '#10b981', fillColor: '#10b981', fillOpacity: 1, radius: 8
+                    }).addTo(map);
+                    isMovingMode = false;
+                }
+
+                // Uppdatera markörens position (och rotation om det är en pil)
+                if (isMovingMode) {
+                    const arrowIcon = L.divIcon({
+                        html: `<div style="transform: rotate(${headingDegree - 90}deg);" class="moving-ferry-icon">➤</div>`,
+                        className: '',
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    });
+                    ferryMarker.setLatLng([pos.lat, pos.lng]);
+                    ferryMarker.setIcon(arrowIcon);
+                } else {
+                    ferryMarker.setLatLng([pos.lat, pos.lng]);
+                }
+                
+                map.panTo([pos.lat, pos.lng]);
+
+                // Uppdatera texter
+                document.getElementById('speedValue').innerText = isCurrentlyMoving ? speedKnots : "0.0";
+
+                if (lastLat !== null && isCurrentlyMoving) {
+                    if (pos.lat < lastLat - 0.00001) currentDirection = "pettu";
+                    else if (pos.lat > lastLat + 0.00001) currentDirection = "mainland";
+                }
 
                 const isPettuSide = pos.lat < MIDPOINT_LAT;
 
-                if (speedKnots >= SPEED_THRESHOLD) {
+                if (isCurrentlyMoving) {
                     if (currentDirection === "pettu") document.getElementById('statusText').innerText = statusDict[currentLang].movingPettu;
                     else if (currentDirection === "mainland") document.getElementById('statusText').innerText = statusDict[currentLang].movingMainland;
                     else document.getElementById('statusText').innerText = statusDict[currentLang].moving; 
                 } else {
                     document.getElementById('statusText').innerText = isPettuSide ? statusDict[currentLang].dockedPettu : statusDict[currentLang].dockedMainland;
                 }
+                
+                // Spara för nästa runda
+                lastLat = pos.lat;
+                lastLng = pos.lng;
                 
                 updateLastSeen();
             }

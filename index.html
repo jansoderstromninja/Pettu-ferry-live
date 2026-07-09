@@ -13,7 +13,6 @@
   <style>
     body { font-family: 'Inter', sans-serif; background: #0f172a; color: white; }
     .font-mono-tabular { font-family: 'JetBrains+Mono', monospace; }
-    /* CSS för den anpassade rörliga pilen på kartan */
     .moving-ferry-icon {
       color: #10b981;
       font-size: 24px;
@@ -25,7 +24,7 @@
 </head>
 <body class="p-4">
   <header class="flex justify-between items-center w-full max-w-md mx-auto mb-6">
-    <div class="flex items-center space-x-2"><div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></div><span class="text-xs uppercase text-slate-400">LIVE</span></div>
+    <div class="flex items-center space-x-2"><div class="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" id="liveIndicator"></div><span class="text-xs uppercase text-slate-400">LIVE</span></div>
     <div class="flex gap-2">
         <button id="langBtn" onclick="nextLang()" class="bg-slate-800 text-xs px-3 py-1 rounded-full border border-slate-700 hover:bg-slate-700 transition"></button>
         <button onclick="toggleRules()" class="bg-slate-800 text-xs px-3 py-1 rounded-full border border-slate-700 hover:bg-slate-700 transition">ℹ️</button>
@@ -40,11 +39,17 @@
       <span id="speedValue" class="text-4xl font-bold text-emerald-400 font-mono-tabular">0.0</span> <span class="text-slate-400">kn</span>
     </div>
 
-    <div class="bg-slate-800 p-4 rounded-3xl grid grid-cols-2 gap-4 text-center text-xs">
-      <div>🌡️ <span id="weatherTemp" class="font-mono-tabular">--</span></div>
-      <div>💨 <span id="weatherWind" class="font-mono-tabular">--</span></div>
-      <div>🚗 <span id="carCount" class="font-mono-tabular font-bold text-emerald-400">0</span> <span id="carLabel"></span></div>
-      <div>🚢 <span id="tripCount" class="font-mono-tabular font-bold text-emerald-400">0</span> <span id="tripLabel"></span></div>
+    <!-- Nya designen med väder/vatten på övre raden, färjedata på undre -->
+    <div class="bg-slate-800 p-4 rounded-3xl space-y-4">
+      <div class="grid grid-cols-3 gap-2 text-center text-[11px] sm:text-xs border-b border-slate-700 pb-4">
+        <div>🌡️ <span id="weatherTemp" class="font-mono-tabular">--</span></div>
+        <div>💨 <span id="weatherWind" class="font-mono-tabular">--</span></div>
+        <div>🌊 <span id="waterLevel" class="font-mono-tabular">--</span></div>
+      </div>
+      <div class="grid grid-cols-2 gap-4 text-center text-xs">
+        <div>🚗 <span id="carCount" class="font-mono-tabular font-bold text-emerald-400">0</span> <span id="carLabel"></span></div>
+        <div>🚢 <span id="tripCount" class="font-mono-tabular font-bold text-emerald-400">0</span> <span id="tripLabel"></span></div>
+      </div>
     </div>
   </main>
 
@@ -60,7 +65,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.41</p>
+    <p>Version 2.44</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -93,9 +98,9 @@
     let currentLang = localStorage.getItem('lang') || 'sv';
     
     const statusDict = {
-        sv: { movingPettu: "Mot Pettu", movingMainland: "Mot Utö", dockedPettu: "På Pettu", dockedMainland: "På Utö", moving: "Under körning", error: "Väntar på data..." },
-        fi: { movingPettu: "Kohti Pettua", movingMainland: "Kohti Utötä", dockedPettu: "Petussa", dockedMainland: "Utössä", moving: "Liikenteessä", error: "Odottaa tietoja..." },
-        en: { movingPettu: "Towards Pettu", movingMainland: "Towards Utö", dockedPettu: "At Pettu", dockedMainland: "At Utö", moving: "Moving", error: "Waiting for data..." }
+        sv: { movingPettu: "Mot Pettu", movingMainland: "Mot Utö", dockedPettu: "På Pettu", dockedMainland: "På Utö", moving: "På väg", offline: "Ingen GPS-signal", error: "Väntar på data..." },
+        fi: { movingPettu: "Kohti Pettua", movingMainland: "Kohti Utötä", dockedPettu: "Petussa", dockedMainland: "Utössä", moving: "Matkalla", offline: "Ei GPS-signaalia", error: "Odottaa tietoja..." },
+        en: { movingPettu: "Towards Pettu", movingMainland: "Towards Utö", dockedPettu: "At Pettu", dockedMainland: "At Utö", moving: "En route", offline: "No GPS signal", error: "Waiting for data..." }
     };
 
     const dict = {
@@ -110,24 +115,49 @@
         location.reload();
     }
 
-    async function fetchWeather() {
+    // Kombinerad funktion för all naturdata, som körs helt oberoende av färjans status
+    async function fetchEnvironmentData() {
+        // Hämta väder
         try {
             const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=60.04&longitude=22.92&current=temperature_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m&wind_speed_unit=ms');
             const data = await res.json();
-            
             document.getElementById('weatherTemp').innerText = Math.round(data.current.temperature_2m) + "°C";
             
             const windSpeed = data.current.wind_speed_10m.toFixed(1);
             const windGusts = data.current.wind_gusts_10m.toFixed(1);
             const windDir = data.current.wind_direction_10m;
             
-            document.getElementById('weatherWind').innerHTML = `${windSpeed} (${windGusts}) m/s <span style="display:inline-block; transform:rotate(${windDir}deg); margin-left:2px;">↓</span>`;
-        } catch(e) { console.error(e); }
-    }
-    fetchWeather();
+            document.getElementById('weatherWind').innerHTML = `${windSpeed} (${windGusts}) <span style="display:inline-block; transform:rotate(${windDir}deg); margin-left:1px;">↓</span>`;
+        } catch(e) { console.error("Weather error:", e); }
 
-    function updateLastSeen() {
-        document.getElementById('updateTime').innerText = new Date().toLocaleTimeString();
+        // Hämta vattenstånd från Meteorologiska Institutet (FMI) - Turku Mareograf (närmast tillförlitlig)
+        try {
+            const waterRes = await fetch('https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature&storedquery_id=fmi::observations::mareograph::simple&place=turku');
+            const text = await waterRes.text();
+            
+            // FMI skickar XML, vi fiskar ut de senaste ParameterValue
+            const matches = [...text.matchAll(/<BsWfs:ParameterValue>(.*?)<\/BsWfs:ParameterValue>/g)];
+            if(matches.length > 0) {
+                const latest = matches[matches.length - 1][1];
+                if(latest !== "NaN") {
+                    const val = Math.round(latest);
+                    const sign = val > 0 ? "+" : "";
+                    document.getElementById('waterLevel').innerText = sign + val + " cm";
+                }
+            }
+        } catch(e) { console.error("Water level error:", e); }
+    }
+    
+    // Kör direkt, och sedan var 10:e minut oavsett om tabletten är av eller på
+    fetchEnvironmentData();
+    setInterval(fetchEnvironmentData, 10 * 60 * 1000);
+
+    function updateLastSeen(timestampMs) {
+        if(timestampMs) {
+            document.getElementById('updateTime').innerText = new Date(timestampMs).toLocaleTimeString();
+        } else {
+            document.getElementById('updateTime').innerText = new Date().toLocaleTimeString();
+        }
     }
 
     document.getElementById('langBtn').innerText = flags[currentLang] + " " + currentLang.toUpperCase();
@@ -141,18 +171,15 @@
     });
     
     const db = firebase.database();
-    
     const todayDate = new Date();
     const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
     
     db.ref(`days/${today}/logs`).on('value', s => {
         document.getElementById('carCount').innerText = Object.values(s.val()||{}).reduce((a,b)=>a+(b.delta||0),0);
-        updateLastSeen();
     });
     
     db.ref(`turer/${today}`).on('value', s => {
         document.getElementById('tripCount').innerText = s.numChildren();
-        updateLastSeen();
     });
 
     const map = L.map('map', { 
@@ -161,7 +188,6 @@
     
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
 
-    // Initial markör (bollen vid kaj)
     let ferryMarker = L.circleMarker([60.0385, 22.9227], {
         color: '#10b981',
         fillColor: '#10b981',
@@ -169,97 +195,115 @@
         radius: 8
     }).addTo(map);
 
-    let lastLat = null;
-    let lastLng = null;
     let currentDirection = "unknown";
-    let isMovingMode = false; // Håller koll på om vi visar boll eller pil
+    let isMovingMode = false;
     
     const MIDPOINT_LAT = 60.03855; 
     const SPEED_THRESHOLD = 1.8; 
+    const OFFLINE_TIMEOUT = 5 * 60 * 1000; 
 
-    db.ref(`breadcrumbs/${today}`).orderByKey().limitToLast(1).on('value', snapshot => {
+    // Hämtar de 2 senaste punkterna för att direkt veta riktningen
+    db.ref(`breadcrumbs/${today}`).orderByKey().limitToLast(2).on('value', snapshot => {
+        let points = [];
         snapshot.forEach(childSnapshot => {
-            const pos = childSnapshot.val();
+            points.push(childSnapshot.val());
+        });
+
+        if (points.length === 0) return;
+
+        const pos = points[points.length - 1];
+        const prevPos = points.length === 2 ? points[0] : null;
+        
+        if (pos && pos.lat && pos.lng) {
+            // Offline check
+            const dataAge = Date.now() - (pos.ts || Date.now());
+            const isOffline = dataAge > OFFLINE_TIMEOUT;
+
+            const speedMps = pos.speed || 0;
+            const speedKnots = (speedMps * 1.94384).toFixed(1);
+            const isCurrentlyMoving = speedKnots >= SPEED_THRESHOLD;
+            const shouldBeArrow = isCurrentlyMoving && !isOffline;
             
-            if (pos && pos.lat && pos.lng) {
-                const speedMps = pos.speed || 0;
-                const speedKnots = (speedMps * 1.94384).toFixed(1);
-                const isCurrentlyMoving = speedKnots >= SPEED_THRESHOLD;
+            document.getElementById('liveIndicator').className = isOffline ? 
+                "w-3 h-3 rounded-full bg-red-500" : "w-3 h-3 rounded-full bg-emerald-500 animate-pulse";
+            document.getElementById('speedValue').classList.toggle('text-slate-500', isOffline);
+            document.getElementById('speedValue').classList.toggle('text-emerald-400', !isOffline);
+
+            let headingDegree = 0;
+            
+            if (prevPos && prevPos.lat && prevPos.lng) {
+                const dy = pos.lat - prevPos.lat;
+                const dx = Math.cos(Math.PI/180 * prevPos.lat) * (pos.lng - prevPos.lng);
+                headingDegree = Math.atan2(dx, dy) * (180 / Math.PI);
                 
-                // Räkna ut riktningen i grader (bara om vi rör oss och har en tidigare punkt)
-                let headingDegree = 0;
-                if (isCurrentlyMoving && lastLat !== null && lastLng !== null) {
-                    // atan2 ger vinkeln i radianer, som vi konverterar till grader och justerar för kartans norr-orientering
-                    const dy = pos.lat - lastLat;
-                    const dx = Math.cos(Math.PI/180 * lastLat) * (pos.lng - lastLng);
-                    headingDegree = Math.atan2(dx, dy) * (180 / Math.PI);
+                if (isCurrentlyMoving) {
+                    if (pos.lat < prevPos.lat - 0.000005) {
+                        currentDirection = "pettu";
+                    } else if (pos.lat > prevPos.lat + 0.000005) {
+                        currentDirection = "mainland";
+                    }
                 }
+            }
 
-                // Byta mellan Cirkel och Pil beroende på fart
-                if (isCurrentlyMoving && !isMovingMode) {
-                    // Ta bort bollen
-                    map.removeLayer(ferryMarker);
-                    // Skapa pilen (använder DivIcon för att kunna rotera text)
-                    const arrowIcon = L.divIcon({
-                        html: `<div style="transform: rotate(${headingDegree}deg);" class="moving-ferry-icon">➤</div>`,
-                        className: '', // Tar bort default bakgrund
-                        iconSize: [24, 24],
-                        iconAnchor: [12, 12]
-                    });
-                    ferryMarker = L.marker([pos.lat, pos.lng], { icon: arrowIcon }).addTo(map);
-                    isMovingMode = true;
-                } 
-                else if (!isCurrentlyMoving && isMovingMode) {
-                    // Ta bort pilen
-                    map.removeLayer(ferryMarker);
-                    // Tillbaka till bollen
-                    ferryMarker = L.circleMarker([pos.lat, pos.lng], {
-                        color: '#10b981', fillColor: '#10b981', fillOpacity: 1, radius: 8
-                    }).addTo(map);
-                    isMovingMode = false;
-                }
+            if (shouldBeArrow && !isMovingMode) {
+                map.removeLayer(ferryMarker);
+                const arrowIcon = L.divIcon({
+                    html: `<div style="transform: rotate(${headingDegree - 90}deg);" class="moving-ferry-icon">➤</div>`,
+                    className: '',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+                ferryMarker = L.marker([pos.lat, pos.lng], { icon: arrowIcon }).addTo(map);
+                isMovingMode = true;
+            } 
+            else if (!shouldBeArrow && isMovingMode) {
+                map.removeLayer(ferryMarker);
+                ferryMarker = L.circleMarker([pos.lat, pos.lng], {
+                    color: isOffline ? '#64748b' : '#10b981', 
+                    fillColor: isOffline ? '#64748b' : '#10b981', 
+                    fillOpacity: 1, radius: 8
+                }).addTo(map);
+                isMovingMode = false;
+            }
 
-                // Uppdatera markörens position (och rotation om det är en pil)
-                if (isMovingMode) {
-                    const arrowIcon = L.divIcon({
-                        html: `<div style="transform: rotate(${headingDegree - 90}deg);" class="moving-ferry-icon">➤</div>`,
-                        className: '',
-                        iconSize: [24, 24],
-                        iconAnchor: [12, 12]
-                    });
-                    ferryMarker.setLatLng([pos.lat, pos.lng]);
-                    ferryMarker.setIcon(arrowIcon);
-                } else {
-                    ferryMarker.setLatLng([pos.lat, pos.lng]);
-                }
-                
-                map.panTo([pos.lat, pos.lng]);
+            if (isMovingMode) {
+                const arrowIcon = L.divIcon({
+                    html: `<div style="transform: rotate(${headingDegree - 90}deg);" class="moving-ferry-icon">➤</div>`,
+                    className: '',
+                    iconSize: [24, 24],
+                    iconAnchor: [12, 12]
+                });
+                ferryMarker.setLatLng([pos.lat, pos.lng]);
+                ferryMarker.setIcon(arrowIcon);
+            } else {
+                ferryMarker.setStyle({
+                    color: isOffline ? '#64748b' : '#10b981',
+                    fillColor: isOffline ? '#64748b' : '#10b981'
+                });
+                ferryMarker.setLatLng([pos.lat, pos.lng]);
+            }
+            
+            map.panTo([pos.lat, pos.lng]);
 
-                // Uppdatera texter
+            if (isOffline) {
+                document.getElementById('statusText').innerText = statusDict[currentLang].offline;
+                document.getElementById('speedValue').innerText = "-.-";
+            } else {
                 document.getElementById('speedValue').innerText = isCurrentlyMoving ? speedKnots : "0.0";
-
-                if (lastLat !== null && isCurrentlyMoving) {
-                    if (pos.lat < lastLat - 0.00001) currentDirection = "pettu";
-                    else if (pos.lat > lastLat + 0.00001) currentDirection = "mainland";
-                }
 
                 const isPettuSide = pos.lat < MIDPOINT_LAT;
 
                 if (isCurrentlyMoving) {
                     if (currentDirection === "pettu") document.getElementById('statusText').innerText = statusDict[currentLang].movingPettu;
                     else if (currentDirection === "mainland") document.getElementById('statusText').innerText = statusDict[currentLang].movingMainland;
-                    else document.getElementById('statusText').innerText = statusDict[currentLang].moving; 
+                    else document.getElementById('statusText').innerText = statusDict[currentLang].moving;
                 } else {
                     document.getElementById('statusText').innerText = isPettuSide ? statusDict[currentLang].dockedPettu : statusDict[currentLang].dockedMainland;
                 }
-                
-                // Spara för nästa runda
-                lastLat = pos.lat;
-                lastLng = pos.lng;
-                
-                updateLastSeen();
             }
-        });
+            
+            updateLastSeen(pos.ts);
+        }
     });
   </script>
 </body>

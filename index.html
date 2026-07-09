@@ -12,7 +12,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <style>
     body { font-family: 'Inter', sans-serif; background: #0f172a; color: white; }
-    .font-mono-tabular { font-family: 'JetBrains+Mono', monospace; }
+    .font-mono-tabular { font-family: 'JetBrains+Mono', monospace; font-variant-numeric: tabular-nums; }
     .moving-ferry-icon {
       color: #10b981;
       font-size: 24px;
@@ -39,9 +39,8 @@
       <span id="speedValue" class="text-4xl font-bold text-emerald-400 font-mono-tabular">0.0</span> <span class="text-slate-400">kn</span>
     </div>
 
-    <!-- Nya designen med väder/vatten på övre raden, färjedata på undre -->
     <div class="bg-slate-800 p-4 rounded-3xl space-y-4">
-      <div class="grid grid-cols-3 gap-2 text-center text-[11px] sm:text-xs border-b border-slate-700 pb-4">
+      <div class="grid grid-cols-3 gap-1 text-center text-[11px] sm:text-xs border-b border-slate-700 pb-4">
         <div>🌡️ <span id="weatherTemp" class="font-mono-tabular">--</span></div>
         <div>💨 <span id="weatherWind" class="font-mono-tabular">--</span></div>
         <div>🌊 <span id="waterLevel" class="font-mono-tabular">--</span></div>
@@ -65,7 +64,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.44</p>
+    <p>Version 2.48</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -115,40 +114,38 @@
         location.reload();
     }
 
-    // Kombinerad funktion för all naturdata, som körs helt oberoende av färjans status
     async function fetchEnvironmentData() {
-        // Hämta väder
         try {
             const res = await fetch('https://api.open-meteo.com/v1/forecast?latitude=60.04&longitude=22.92&current=temperature_2m,wind_speed_10m,wind_gusts_10m,wind_direction_10m&wind_speed_unit=ms');
             const data = await res.json();
             document.getElementById('weatherTemp').innerText = Math.round(data.current.temperature_2m) + "°C";
             
+            // ToFixed(1) garanterar att det alltid är en decimal, även om det t.ex. är 5.0
             const windSpeed = data.current.wind_speed_10m.toFixed(1);
             const windGusts = data.current.wind_gusts_10m.toFixed(1);
             const windDir = data.current.wind_direction_10m;
             
-            document.getElementById('weatherWind').innerHTML = `${windSpeed} (${windGusts}) <span style="display:inline-block; transform:rotate(${windDir}deg); margin-left:1px;">↓</span>`;
+            // Format: 5.2(7.4)m/s ↓
+            document.getElementById('weatherWind').innerHTML = `${windSpeed}(${windGusts})m/s <span style="display:inline-block; transform:rotate(${windDir}deg); margin-left:1px;">↓</span>`;
         } catch(e) { console.error("Weather error:", e); }
 
-        // Hämta vattenstånd från Meteorologiska Institutet (FMI) - Turku Mareograf (närmast tillförlitlig)
         try {
             const waterRes = await fetch('https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0&request=getFeature&storedquery_id=fmi::observations::mareograph::simple&place=turku');
             const text = await waterRes.text();
             
-            // FMI skickar XML, vi fiskar ut de senaste ParameterValue
             const matches = [...text.matchAll(/<BsWfs:ParameterValue>(.*?)<\/BsWfs:ParameterValue>/g)];
             if(matches.length > 0) {
                 const latest = matches[matches.length - 1][1];
                 if(latest !== "NaN") {
-                    const val = Math.round(latest);
+                    const val = Math.round(latest / 10);
                     const sign = val > 0 ? "+" : "";
-                    document.getElementById('waterLevel').innerText = sign + val + " cm";
+                    // Inget mellanslag mellan siffran och "cm"
+                    document.getElementById('waterLevel').innerText = sign + val + "cm";
                 }
             }
         } catch(e) { console.error("Water level error:", e); }
     }
     
-    // Kör direkt, och sedan var 10:e minut oavsett om tabletten är av eller på
     fetchEnvironmentData();
     setInterval(fetchEnvironmentData, 10 * 60 * 1000);
 
@@ -202,7 +199,6 @@
     const SPEED_THRESHOLD = 1.8; 
     const OFFLINE_TIMEOUT = 5 * 60 * 1000; 
 
-    // Hämtar de 2 senaste punkterna för att direkt veta riktningen
     db.ref(`breadcrumbs/${today}`).orderByKey().limitToLast(2).on('value', snapshot => {
         let points = [];
         snapshot.forEach(childSnapshot => {
@@ -215,7 +211,6 @@
         const prevPos = points.length === 2 ? points[0] : null;
         
         if (pos && pos.lat && pos.lng) {
-            // Offline check
             const dataAge = Date.now() - (pos.ts || Date.now());
             const isOffline = dataAge > OFFLINE_TIMEOUT;
 

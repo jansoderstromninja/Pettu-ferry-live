@@ -25,7 +25,6 @@
   </header>
 
   <main class="w-full max-w-md mx-auto space-y-4">
-    <!-- Jag lade även till pointer-events-none här för att vara 100% säker på att kartan ignorerar alla klick på mobilen -->
     <div id="mapWrapper" class="w-full bg-slate-800 p-2 rounded-3xl"><div id="map" class="w-full h-48 rounded-2xl pointer-events-none"></div></div>
     
     <div class="bg-slate-800 p-6 rounded-3xl text-center shadow-xl">
@@ -41,14 +40,12 @@
     </div>
   </main>
 
-  <!-- Regel-Modal med fast bakgrundsfärg -->
   <div id="rulesModal" class="hidden fixed inset-0 bg-slate-900 z-[9999] p-6">
     <div class="max-w-md mx-auto h-full flex flex-col">
       <div class="flex justify-between items-center mb-4 border-b border-slate-700 pb-4">
         <h2 id="rulesTitle" class="text-xl font-bold text-emerald-400"></h2>
         <button onclick="toggleRules()" class="p-2 bg-slate-800 rounded-full">✕</button>
       </div>
-      <!-- Listan injiceras här via JS med riktiga punkter -->
       <div id="rulesContent" class="flex-1 overflow-y-auto pr-2 text-sm text-slate-300">
       </div>
       <button id="rulesCloseBtn" onclick="toggleRules()" class="mt-4 w-full bg-emerald-600 py-4 rounded-2xl font-bold text-white">Stäng</button>
@@ -56,7 +53,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.33</p>
+    <p>Version 2.34</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -77,7 +74,6 @@
         document.getElementById('rulesTitle').innerText = rulesData[lang].title;
         document.getElementById('rulesCloseBtn').innerText = rulesData[lang].close;
         
-        // Riktig punktlista med mellanrum
         document.getElementById('rulesContent').innerHTML = 
             `<ul class="list-disc ml-5 space-y-3">` + 
             rulesData[lang].items.map(i => `<li class="border-b border-slate-800 pb-3 pl-1">${i}</li>`).join('') + 
@@ -90,9 +86,9 @@
     let currentLang = localStorage.getItem('lang') || 'sv';
     
     const dict = {
-      sv: { status: "Ansluter till färjan...", car: "bilar", trip: "turer" },
-      fi: { status: "Yhdistetään lossiin...", car: "autoa", trip: "vuoroa" },
-      en: { status: "Connecting to ferry...", car: "cars", trip: "trips" }
+      sv: { status: "Klar", car: "bilar", trip: "turer" },
+      fi: { status: "Valmis", car: "autoa", trip: "vuoroa" },
+      en: { status: "Ready", car: "cars", trip: "trips" }
     };
 
     function nextLang() {
@@ -112,7 +108,6 @@
     }
     fetchWeather();
 
-    // Uppdatera klockslaget när data tas emot
     function updateLastSeen() {
         document.getElementById('updateTime').innerText = new Date().toLocaleTimeString();
     }
@@ -142,18 +137,46 @@
         updateLastSeen();
     });
 
-    // Karta (helt låst)
+    // Karta (låst för interaktion)
     const map = L.map('map', { 
-        zoomControl: false, 
-        dragging: false, 
-        scrollWheelZoom: false, 
-        touchZoom: false, 
-        doubleClickZoom: false, 
-        boxZoom: false, 
-        keyboard: false 
+        zoomControl: false, dragging: false, scrollWheelZoom: false, touchZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false 
     }).setView([60.0385, 22.9227], 14);
     
     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}').addTo(map);
+
+    // Färjans markör (Grön prick)
+    const ferryMarker = L.circleMarker([60.0385, 22.9227], {
+        color: '#10b981',
+        fillColor: '#10b981',
+        fillOpacity: 1,
+        radius: 8
+    }).addTo(map);
+
+    // GPS & Fart-logik (läser tablettens webbläsare)
+    if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+                const speedMps = position.coords.speed; // Fart i m/s
+                
+                // Uppdatera kartans centrum och pricken
+                ferryMarker.setLatLng([lat, lon]);
+                map.panTo([lat, lon]);
+
+                // Om vi har en fart från GPS:en, konvertera till knop (1 m/s = 1.94384 knop)
+                if (speedMps !== null) {
+                    const speedKnots = (speedMps * 1.94384).toFixed(1);
+                    document.getElementById('speedValue').innerText = speedKnots;
+                    document.getElementById('statusText').innerText = speedKnots > 0.5 ? "Under körning" : "Vid kaj";
+                }
+            },
+            (error) => { console.error("GPS-fel:", error); },
+            { enableHighAccuracy: true, maximumAge: 0 }
+        );
+    } else {
+        console.log("Geolocation stöds inte av din webbläsare.");
+    }
   </script>
 </body>
 </html>

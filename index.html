@@ -53,7 +53,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.34</p>
+    <p>Version 2.36</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -85,10 +85,16 @@
     const flags = { 'sv': '🇸🇪', 'fi': '🇫🇮', 'en': '🇬🇧' };
     let currentLang = localStorage.getItem('lang') || 'sv';
     
+    const statusDict = {
+        sv: { moving: "Under körning", docked: "Vid kaj", error: "Väntar på data..." },
+        fi: { moving: "Liikenteessä", docked: "Rannassa", error: "Odottaa tietoja..." },
+        en: { moving: "Moving", docked: "Docked", error: "Waiting for data..." }
+    };
+
     const dict = {
-      sv: { status: "Klar", car: "bilar", trip: "turer" },
-      fi: { status: "Valmis", car: "autoa", trip: "vuoroa" },
-      en: { status: "Ready", car: "cars", trip: "trips" }
+      sv: { car: "bilar", trip: "turer" },
+      fi: { car: "autoa", trip: "vuoroa" },
+      en: { car: "cars", trip: "trips" }
     };
 
     function nextLang() {
@@ -114,7 +120,7 @@
 
     // Initiera UI
     document.getElementById('langBtn').innerText = flags[currentLang] + " " + currentLang.toUpperCase();
-    document.getElementById('statusText').innerText = dict[currentLang].status;
+    document.getElementById('statusText').innerText = statusDict[currentLang].error;
     document.getElementById('carLabel').innerText = dict[currentLang].car;
     document.getElementById('tripLabel').innerText = dict[currentLang].trip;
 
@@ -127,6 +133,7 @@
     const db = firebase.database();
     const today = new Date().toISOString().split('T')[0];
     
+    // Turer och bilar
     db.ref(`days/${today}/logs`).on('value', s => {
         document.getElementById('carCount').innerText = Object.values(s.val()||{}).reduce((a,b)=>a+(b.delta||0),0);
         updateLastSeen();
@@ -152,31 +159,36 @@
         radius: 8
     }).addTo(map);
 
-    // GPS & Fart-logik (läser tablettens webbläsare)
-    if ("geolocation" in navigator) {
-        navigator.geolocation.watchPosition(
-            (position) => {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                const speedMps = position.coords.speed; // Fart i m/s
+    // Läs in GPS-data (endast sista posten för dagens datum)
+    db.ref(`breadcrumbs/${today}`).orderByKey().limitToLast(1).on('value', snapshot => {
+        snapshot.forEach(childSnapshot => {
+            const pos = childSnapshot.val();
+            
+            // Kolla så att lat och lng (viktigt: lng, inte lon!) finns
+            if (pos && pos.lat && pos.lng) {
                 
-                // Uppdatera kartans centrum och pricken
-                ferryMarker.setLatLng([lat, lon]);
-                map.panTo([lat, lon]);
+                // Uppdatera markör och centrera karta
+                ferryMarker.setLatLng([pos.lat, pos.lng]);
+                map.panTo([pos.lat, pos.lng]);
 
-                // Om vi har en fart från GPS:en, konvertera till knop (1 m/s = 1.94384 knop)
-                if (speedMps !== null) {
-                    const speedKnots = (speedMps * 1.94384).toFixed(1);
-                    document.getElementById('speedValue').innerText = speedKnots;
-                    document.getElementById('statusText').innerText = speedKnots > 0.5 ? "Under körning" : "Vid kaj";
+                // Läs fart (hanterar fallback till 0 om speed saknas)
+                const speedMps = pos.speed || 0;
+                
+                // Konvertera m/s till knop (1 m/s = 1.94384 knop)
+                const speedKnots = (speedMps * 1.94384).toFixed(1);
+                document.getElementById('speedValue').innerText = speedKnots;
+                
+                // Uppdatera textstatus ("Under körning" vs "Vid kaj")
+                if (speedKnots > 0.5) {
+                    document.getElementById('statusText').innerText = statusDict[currentLang].moving;
+                } else {
+                    document.getElementById('statusText').innerText = statusDict[currentLang].docked;
                 }
-            },
-            (error) => { console.error("GPS-fel:", error); },
-            { enableHighAccuracy: true, maximumAge: 0 }
-        );
-    } else {
-        console.log("Geolocation stöds inte av din webbläsare.");
-    }
+                
+                updateLastSeen();
+            }
+        });
+    });
   </script>
 </body>
 </html>

@@ -120,12 +120,10 @@
             const data = await res.json();
             document.getElementById('weatherTemp').innerText = Math.round(data.current.temperature_2m) + "°C";
             
-            // ToFixed(1) garanterar att det alltid är en decimal, även om det t.ex. är 5.0
             const windSpeed = data.current.wind_speed_10m.toFixed(1);
             const windGusts = data.current.wind_gusts_10m.toFixed(1);
             const windDir = data.current.wind_direction_10m;
             
-            // Format: 5.2(7.4)m/s ↓
             document.getElementById('weatherWind').innerHTML = `${windSpeed}(${windGusts})m/s <span style="display:inline-block; transform:rotate(${windDir}deg); margin-left:1px;">↓</span>`;
         } catch(e) { console.error("Weather error:", e); }
 
@@ -135,11 +133,18 @@
             
             const matches = [...text.matchAll(/<BsWfs:ParameterValue>(.*?)<\/BsWfs:ParameterValue>/g)];
             if(matches.length > 0) {
-                const latest = matches[matches.length - 1][1];
-                if(latest !== "NaN") {
-                    const val = Math.round(latest / 10);
+                // NY KOD FÖR VATTENSTÅND HÄR: Leta baklänges efter första giltiga värdet
+                let latestValid = null;
+                for (let i = matches.length - 1; i >= 0; i--) {
+                    if (matches[i][1] !== "NaN") {
+                        latestValid = matches[i][1];
+                        break;
+                    }
+                }
+                
+                if(latestValid !== null) {
+                    const val = Math.round(latestValid / 10);
                     const sign = val > 0 ? "+" : "";
-                    // Inget mellanslag mellan siffran och "cm"
                     document.getElementById('waterLevel').innerText = sign + val + "cm";
                 }
             }

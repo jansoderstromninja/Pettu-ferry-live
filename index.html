@@ -33,7 +33,7 @@
 
   <main class="w-full max-w-md mx-auto space-y-4">
     
-    <div id="driftStatusBanner" class="hidden w-full bg-amber-500/10 border border-amber-500 text-amber-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg shadow-amber-900/20">
+    <div id="driftStatusBanner" class="hidden">
       <span id="driftStatusText"></span>
     </div>
 
@@ -69,7 +69,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.50</p>
+    <p>Version 2.51</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -113,21 +113,24 @@
       en: { car: "cars", trip: "trips" }
     };
 
-    // Översättningar för vår nya Driftstatus
+    // Översättningar för vår Driftstatus
     const driftStatusDict = {
         sv: {
+            normal: "✅ Normal drift",
             service: "⚠️ Service/underhåll",
             tankning: "⛽ Tankning pågår",
             utryckning: "🚨 Utryckningsfordon väntas",
             annat: "ℹ️ Avvikande drift"
         },
         fi: {
+            normal: "✅ Normaali liikenne",
             service: "⚠️ Huolto/ylläpito",
             tankning: "⛽ Tankkaus käynnissä",
             utryckning: "🚨 Hälytysajoneuvoa odotetaan",
             annat: "ℹ️ Poikkeustilanne"
         },
         en: {
+            normal: "✅ Normal operation",
             service: "⚠️ Service/Maintenance",
             tankning: "⛽ Refueling in progress",
             utryckning: "🚨 Emergency vehicle expected",
@@ -141,17 +144,26 @@
         const banner = document.getElementById('driftStatusBanner');
         const textEl = document.getElementById('driftStatusText');
         
-        if (!currentDriftStatus.status || currentDriftStatus.status.toLowerCase() === 'normal') {
+        if (!currentDriftStatus || !currentDriftStatus.status) {
             banner.classList.add('hidden');
             return;
         }
 
-        // Försök matcha status från firebase med ordboken (små bokstäver), annars visa råtext
         let statusKey = currentDriftStatus.status.toLowerCase();
         
-        // Mappa från potentiella ui-strängar om db sparar hela strängen
+        // Mappa specialfall
         if(statusKey.includes('utryckning')) statusKey = 'utryckning';
+        else if(statusKey.includes('normal')) statusKey = 'normal';
         
+        // Dynamisk design baserat på allvarlighetsgrad
+        if (statusKey === 'normal') {
+            banner.className = "w-full bg-emerald-500/10 border border-emerald-500 text-emerald-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg shadow-emerald-900/20";
+        } else if (statusKey === 'utryckning') {
+            banner.className = "w-full bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg shadow-red-900/20 animate-pulse";
+        } else {
+            banner.className = "w-full bg-amber-500/10 border border-amber-500 text-amber-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg shadow-amber-900/20";
+        }
+
         let translatedText = driftStatusDict[currentLang][statusKey] || `⚠️ ${currentDriftStatus.status}`;
         
         if (currentDriftStatus.beskrivning && currentDriftStatus.beskrivning.trim() !== "") {
@@ -165,12 +177,10 @@
     function nextLang() {
         currentLang = langs[(langs.indexOf(currentLang) + 1) % langs.length];
         localStorage.setItem('lang', currentLang);
-        // Uppdatera texter som inte kräver reload
         document.getElementById('langBtn').innerText = flags[currentLang] + " " + currentLang.toUpperCase();
         document.getElementById('carLabel').innerText = dict[currentLang].car;
         document.getElementById('tripLabel').innerText = dict[currentLang].trip;
-        renderDriftStatus(); // Uppdatera varningsbannern direkt
-        // Vi ful-laddar om sidan ändå för att kartans status ska sättas om snyggt
+        renderDriftStatus(); 
         location.reload(); 
     }
 
@@ -235,11 +245,16 @@
     const todayDate = new Date();
     const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
     
-    // NY LYSSNARE FÖR DRIFTSTATUS
+    // LYSSNARE FÖR DRIFTSTATUS. 
+    // Om den gröna bannern "Normal drift" inte syns, testa att ändra 
+    // 'config/status/driftstatus' till t.ex. 'config/driftstatus' eller 'status/driftstatus'
     db.ref('config/status/driftstatus').on('value', snapshot => {
         const val = snapshot.val();
         if (val) {
             currentDriftStatus = val;
+            renderDriftStatus();
+        } else {
+            currentDriftStatus = { status: "normal", beskrivning: "" };
             renderDriftStatus();
         }
     });
@@ -268,7 +283,8 @@
     let currentDirection = "unknown";
     let isMovingMode = false;
     
-    const MIDPOINT_LAT = 60.03855; 
+    // Bytte från Latitud till Longitud för att lösa "På Utö"-buggen
+    const MIDPOINT_LNG = 22.92265; 
     const SPEED_THRESHOLD = 1.8; 
     const OFFLINE_TIMEOUT = 5 * 60 * 1000; 
 
@@ -305,9 +321,10 @@
                 headingDegree = Math.atan2(dx, dy) * (180 / Math.PI);
                 
                 if (isCurrentlyMoving) {
-                    if (pos.lat < prevPos.lat - 0.000005) {
+                    // Vi kollar nu på Väst/Öst-rörelsen istället för Nord/Syd
+                    if (pos.lng < prevPos.lng - 0.000005) {
                         currentDirection = "pettu";
-                    } else if (pos.lat > prevPos.lat + 0.000005) {
+                    } else if (pos.lng > prevPos.lng + 0.000005) {
                         currentDirection = "mainland";
                     }
                 }
@@ -359,7 +376,8 @@
             } else {
                 document.getElementById('speedValue').innerText = isCurrentlyMoving ? speedKnots : "0.0";
 
-                const isPettuSide = pos.lat < MIDPOINT_LAT;
+                // Utvärderar hamn baserat på longitud (öst/väst)
+                const isPettuSide = pos.lng < MIDPOINT_LNG;
 
                 if (isCurrentlyMoving) {
                     if (currentDirection === "pettu") document.getElementById('statusText').innerText = statusDict[currentLang].movingPettu;

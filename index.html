@@ -32,6 +32,11 @@
   </header>
 
   <main class="w-full max-w-md mx-auto space-y-4">
+    
+    <div id="driftStatusBanner" class="hidden w-full bg-amber-500/10 border border-amber-500 text-amber-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg shadow-amber-900/20">
+      <span id="driftStatusText"></span>
+    </div>
+
     <div id="mapWrapper" class="w-full bg-slate-800 p-2 rounded-3xl"><div id="map" class="w-full h-48 rounded-2xl pointer-events-none"></div></div>
     
     <div class="bg-slate-800 p-6 rounded-3xl text-center shadow-xl">
@@ -64,7 +69,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.48</p>
+    <p>Version 2.50</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -108,10 +113,65 @@
       en: { car: "cars", trip: "trips" }
     };
 
+    // Översättningar för vår nya Driftstatus
+    const driftStatusDict = {
+        sv: {
+            service: "⚠️ Service/underhåll",
+            tankning: "⛽ Tankning pågår",
+            utryckning: "🚨 Utryckningsfordon väntas",
+            annat: "ℹ️ Avvikande drift"
+        },
+        fi: {
+            service: "⚠️ Huolto/ylläpito",
+            tankning: "⛽ Tankkaus käynnissä",
+            utryckning: "🚨 Hälytysajoneuvoa odotetaan",
+            annat: "ℹ️ Poikkeustilanne"
+        },
+        en: {
+            service: "⚠️ Service/Maintenance",
+            tankning: "⛽ Refueling in progress",
+            utryckning: "🚨 Emergency vehicle expected",
+            annat: "ℹ️ Exceptional operation"
+        }
+    };
+
+    let currentDriftStatus = { status: "normal", beskrivning: "" };
+
+    function renderDriftStatus() {
+        const banner = document.getElementById('driftStatusBanner');
+        const textEl = document.getElementById('driftStatusText');
+        
+        if (!currentDriftStatus.status || currentDriftStatus.status.toLowerCase() === 'normal') {
+            banner.classList.add('hidden');
+            return;
+        }
+
+        // Försök matcha status från firebase med ordboken (små bokstäver), annars visa råtext
+        let statusKey = currentDriftStatus.status.toLowerCase();
+        
+        // Mappa från potentiella ui-strängar om db sparar hela strängen
+        if(statusKey.includes('utryckning')) statusKey = 'utryckning';
+        
+        let translatedText = driftStatusDict[currentLang][statusKey] || `⚠️ ${currentDriftStatus.status}`;
+        
+        if (currentDriftStatus.beskrivning && currentDriftStatus.beskrivning.trim() !== "") {
+            translatedText += ` – ${currentDriftStatus.beskrivning}`;
+        }
+        
+        textEl.innerText = translatedText;
+        banner.classList.remove('hidden');
+    }
+
     function nextLang() {
         currentLang = langs[(langs.indexOf(currentLang) + 1) % langs.length];
         localStorage.setItem('lang', currentLang);
-        location.reload();
+        // Uppdatera texter som inte kräver reload
+        document.getElementById('langBtn').innerText = flags[currentLang] + " " + currentLang.toUpperCase();
+        document.getElementById('carLabel').innerText = dict[currentLang].car;
+        document.getElementById('tripLabel').innerText = dict[currentLang].trip;
+        renderDriftStatus(); // Uppdatera varningsbannern direkt
+        // Vi ful-laddar om sidan ändå för att kartans status ska sättas om snyggt
+        location.reload(); 
     }
 
     async function fetchEnvironmentData() {
@@ -133,7 +193,6 @@
             
             const matches = [...text.matchAll(/<BsWfs:ParameterValue>(.*?)<\/BsWfs:ParameterValue>/g)];
             if(matches.length > 0) {
-                // NY KOD FÖR VATTENSTÅND HÄR: Leta baklänges efter första giltiga värdet
                 let latestValid = null;
                 for (let i = matches.length - 1; i >= 0; i--) {
                     if (matches[i][1] !== "NaN") {
@@ -176,6 +235,15 @@
     const todayDate = new Date();
     const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
     
+    // NY LYSSNARE FÖR DRIFTSTATUS
+    db.ref('config/status/driftstatus').on('value', snapshot => {
+        const val = snapshot.val();
+        if (val) {
+            currentDriftStatus = val;
+            renderDriftStatus();
+        }
+    });
+
     db.ref(`days/${today}/logs`).on('value', s => {
         document.getElementById('carCount').innerText = Object.values(s.val()||{}).reduce((a,b)=>a+(b.delta||0),0);
     });

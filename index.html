@@ -33,8 +33,8 @@
 
   <main class="w-full max-w-md mx-auto space-y-4">
     
-    <div id="driftStatusBanner" class="w-full bg-slate-800 border border-slate-700 text-slate-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg">
-      <span id="driftStatusText">Laddar driftstatus...</span>
+    <div id="driftStatusBanner" class="hidden">
+      <span id="driftStatusText"></span>
     </div>
 
     <div id="mapWrapper" class="w-full bg-slate-800 p-2 rounded-3xl"><div id="map" class="w-full h-48 rounded-2xl pointer-events-none"></div></div>
@@ -69,7 +69,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.53</p>
+    <p>Version 2.56</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -119,14 +119,15 @@
         en: { normal: "✅ Normal operation", service: "⚠️ Service/Maintenance", tankning: "⛽ Refueling in progress", utryckning: "🚨 Emergency vehicle expected", annat: "ℹ️ Exceptional operation" }
     };
 
-    let currentDriftStatus = { status: "laddar", beskrivning: "" };
+    let currentDriftStatus = { status: "normal", beskrivning: "" };
 
     function renderDriftStatus() {
         const banner = document.getElementById('driftStatusBanner');
         const textEl = document.getElementById('driftStatusText');
         
         if (!currentDriftStatus || !currentDriftStatus.status) {
-            currentDriftStatus = { status: "normal", beskrivning: "" };
+            banner.classList.add('hidden');
+            return;
         }
 
         let statusKey = currentDriftStatus.status.toLowerCase();
@@ -135,17 +136,12 @@
         else if(statusKey.includes('normal')) statusKey = 'normal';
         
         if (statusKey === 'normal') {
-            banner.className = "w-full bg-emerald-500/10 border border-emerald-500 text-emerald-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg shadow-emerald-900/20";
-        } else if (statusKey === 'utryckning') {
+            banner.classList.add('hidden');
+            return;
+        }
+
+        if (statusKey === 'utryckning') {
             banner.className = "w-full bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg shadow-red-900/20 animate-pulse";
-        } else if (statusKey === 'laddar') {
-            banner.className = "w-full bg-slate-800 border border-slate-700 text-slate-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg";
-            textEl.innerText = "Laddar driftstatus...";
-            return;
-        } else if (statusKey === 'error') {
-            banner.className = "w-full bg-red-900/30 border border-red-700 text-red-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg";
-            textEl.innerText = "⚠️ Åtkomst nekad till status (Kolla Firebase Rules)";
-            return;
         } else {
             banner.className = "w-full bg-amber-500/10 border border-amber-500 text-amber-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg shadow-amber-900/20";
         }
@@ -157,6 +153,7 @@
         }
         
         textEl.innerText = translatedText;
+        banner.classList.remove('hidden');
     }
 
     function nextLang() {
@@ -230,7 +227,6 @@
     const todayDate = new Date();
     const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
     
-    // KORREKT SÖKVÄG ENLIGT DINA RULES: config/driftstatus
     db.ref('config/driftstatus').on('value', snapshot => {
         const val = snapshot.val();
         if (val) {
@@ -238,10 +234,6 @@
         } else {
             currentDriftStatus = { status: "normal", beskrivning: "" };
         }
-        renderDriftStatus();
-    }, error => {
-        console.error("Firebase permission error:", error);
-        currentDriftStatus = { status: "error" };
         renderDriftStatus();
     });
 
@@ -273,7 +265,7 @@
     const SPEED_THRESHOLD = 1.8; 
     const OFFLINE_TIMEOUT = 5 * 60 * 1000; 
 
-    db.ref(`breadcrumbs/${today}`).orderByKey().limitToLast(2).on('value', snapshot => {
+    db.ref(`breadcrumbs/${today}`).orderByKey().limitToLast(5).on('value', snapshot => {
         let points = [];
         snapshot.forEach(childSnapshot => {
             points.push(childSnapshot.val());
@@ -281,8 +273,8 @@
 
         if (points.length === 0) return;
 
-        const pos = points[points.length - 1];
-        const prevPos = points.length === 2 ? points[0] : null;
+        const pos = points[points.length - 1]; 
+        const prevPos = points.length > 1 ? points[0] : null; 
         
         if (pos && pos.lat && pos.lng) {
             const dataAge = Date.now() - (pos.ts || Date.now());
@@ -303,13 +295,18 @@
             if (prevPos && prevPos.lat && prevPos.lng) {
                 const dy = pos.lat - prevPos.lat;
                 const dx = Math.cos(Math.PI/180 * prevPos.lat) * (pos.lng - prevPos.lng);
-                headingDegree = Math.atan2(dx, dy) * (180 / Math.PI);
                 
+                if (Math.abs(dx) > 0.000001 || Math.abs(dy) > 0.000001) {
+                    headingDegree = Math.atan2(dx, dy) * (180 / Math.PI);
+                }
+                
+                // RÄTTAD LOGIK: 
+                // Pettu ligger i Öst (högre longitud). Utö ligger i Väst (lägre longitud).
                 if (isCurrentlyMoving) {
-                    if (pos.lng < prevPos.lng - 0.000005) {
-                        currentDirection = "pettu";
-                    } else if (pos.lng > prevPos.lng + 0.000005) {
-                        currentDirection = "mainland";
+                    if (pos.lng > prevPos.lng + 0.000005) {
+                        currentDirection = "pettu"; // Rör sig mot öst -> Pettu
+                    } else if (pos.lng < prevPos.lng - 0.000005) {
+                        currentDirection = "mainland"; // Rör sig mot väst -> Utö
                     }
                 }
             }
@@ -360,7 +357,9 @@
             } else {
                 document.getElementById('speedValue').innerText = isCurrentlyMoving ? speedKnots : "0.0";
 
-                const isPettuSide = pos.lng < MIDPOINT_LNG;
+                // RÄTTAD HAMN-LOGIK: 
+                // Om longituden är högre än mittpunkten, befinner vi oss i Öst (På Pettu)
+                const isPettuSide = pos.lng > MIDPOINT_LNG;
 
                 if (isCurrentlyMoving) {
                     if (currentDirection === "pettu") document.getElementById('statusText').innerText = statusDict[currentLang].movingPettu;

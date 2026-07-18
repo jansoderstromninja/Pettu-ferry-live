@@ -6,7 +6,11 @@
   <title>Pettu Färja - Live</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Firebase Core -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <!-- Firebase Auth (NY: Krävs för anonym inloggning) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <!-- Firebase Database -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -32,11 +36,6 @@
   </header>
 
   <main class="w-full max-w-md mx-auto space-y-4">
-    
-    <div id="driftStatusBanner" class="hidden">
-      <span id="driftStatusText"></span>
-    </div>
-
     <div id="mapWrapper" class="w-full bg-slate-800 p-2 rounded-3xl"><div id="map" class="w-full h-48 rounded-2xl pointer-events-none"></div></div>
     
     <div class="bg-slate-800 p-6 rounded-3xl text-center shadow-xl">
@@ -69,7 +68,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.56</p>
+    <p>Version 2.49</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -113,57 +112,10 @@
       en: { car: "cars", trip: "trips" }
     };
 
-    const driftStatusDict = {
-        sv: { normal: "✅ Normal drift", service: "⚠️ Service/underhåll", tankning: "⛽ Tankning pågår", utryckning: "🚨 Utryckningsfordon väntas", annat: "ℹ️ Avvikande drift" },
-        fi: { normal: "✅ Normaali liikenne", service: "⚠️ Huolto/ylläpito", tankning: "⛽ Tankkaus käynnissä", utryckning: "🚨 Hälytysajoneuvoa odotetaan", annat: "ℹ️ Poikkeustilanne" },
-        en: { normal: "✅ Normal operation", service: "⚠️ Service/Maintenance", tankning: "⛽ Refueling in progress", utryckning: "🚨 Emergency vehicle expected", annat: "ℹ️ Exceptional operation" }
-    };
-
-    let currentDriftStatus = { status: "normal", beskrivning: "" };
-
-    function renderDriftStatus() {
-        const banner = document.getElementById('driftStatusBanner');
-        const textEl = document.getElementById('driftStatusText');
-        
-        if (!currentDriftStatus || !currentDriftStatus.status) {
-            banner.classList.add('hidden');
-            return;
-        }
-
-        let statusKey = currentDriftStatus.status.toLowerCase();
-        
-        if(statusKey.includes('utryckning')) statusKey = 'utryckning';
-        else if(statusKey.includes('normal')) statusKey = 'normal';
-        
-        if (statusKey === 'normal') {
-            banner.classList.add('hidden');
-            return;
-        }
-
-        if (statusKey === 'utryckning') {
-            banner.className = "w-full bg-red-500/10 border border-red-500 text-red-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg shadow-red-900/20 animate-pulse";
-        } else {
-            banner.className = "w-full bg-amber-500/10 border border-amber-500 text-amber-400 px-4 py-3 rounded-3xl text-center text-sm font-bold shadow-lg shadow-amber-900/20";
-        }
-
-        let translatedText = driftStatusDict[currentLang][statusKey] || `⚠️ ${currentDriftStatus.status}`;
-        
-        if (currentDriftStatus.beskrivning && currentDriftStatus.beskrivning.trim() !== "") {
-            translatedText += ` – ${currentDriftStatus.beskrivning}`;
-        }
-        
-        textEl.innerText = translatedText;
-        banner.classList.remove('hidden');
-    }
-
     function nextLang() {
         currentLang = langs[(langs.indexOf(currentLang) + 1) % langs.length];
         localStorage.setItem('lang', currentLang);
-        document.getElementById('langBtn').innerText = flags[currentLang] + " " + currentLang.toUpperCase();
-        document.getElementById('carLabel').innerText = dict[currentLang].car;
-        document.getElementById('tripLabel').innerText = dict[currentLang].trip;
-        renderDriftStatus(); 
-        location.reload(); 
+        location.reload();
     }
 
     async function fetchEnvironmentData() {
@@ -185,16 +137,9 @@
             
             const matches = [...text.matchAll(/<BsWfs:ParameterValue>(.*?)<\/BsWfs:ParameterValue>/g)];
             if(matches.length > 0) {
-                let latestValid = null;
-                for (let i = matches.length - 1; i >= 0; i--) {
-                    if (matches[i][1] !== "NaN") {
-                        latestValid = matches[i][1];
-                        break;
-                    }
-                }
-                
-                if(latestValid !== null) {
-                    const val = Math.round(latestValid / 10);
+                const latest = matches[matches.length - 1][1];
+                if(latest !== "NaN") {
+                    const val = Math.round(latest / 10);
                     const sign = val > 0 ? "+" : "";
                     document.getElementById('waterLevel').innerText = sign + val + "cm";
                 }
@@ -202,6 +147,7 @@
         } catch(e) { console.error("Water level error:", e); }
     }
     
+    // Miljödatan kräver inte inloggning, så den startar direkt
     fetchEnvironmentData();
     setInterval(fetchEnvironmentData, 10 * 60 * 1000);
 
@@ -218,32 +164,25 @@
     document.getElementById('carLabel').innerText = dict[currentLang].car;
     document.getElementById('tripLabel').innerText = dict[currentLang].trip;
 
+    // Firebase Initialization
     firebase.initializeApp({
       apiKey: "AIzaSyDregBlw1hjcHotJAk8938xXAjQKbHXS1Q",
       databaseURL: "https://fordonsraknare-default-rtdb.europe-west1.firebasedatabase.app"
     });
     
-    const db = firebase.database();
-    const todayDate = new Date();
-    const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-    
-    db.ref('config/driftstatus').on('value', snapshot => {
-        const val = snapshot.val();
-        if (val) {
-            currentDriftStatus = val;
-        } else {
-            currentDriftStatus = { status: "normal", beskrivning: "" };
-        }
-        renderDriftStatus();
-    });
-
-    db.ref(`days/${today}/logs`).on('value', s => {
-        document.getElementById('carCount').innerText = Object.values(s.val()||{}).reduce((a,b)=>a+(b.delta||0),0);
-    });
-    
-    db.ref(`turer/${today}`).on('value', s => {
-        document.getElementById('tripCount').innerText = s.numChildren();
-    });
+    // -----------------------------------------------------------
+    // NYTT: Autentisera appen anonymt innan databasen anropas!
+    // -----------------------------------------------------------
+    firebase.auth().signInAnonymously()
+      .then(() => {
+          console.log("Inloggad anonymt. Startar GPS-spårning...");
+          startDatabaseListeners(); // Starta databas-pingen när vi väl har tillstånd
+      })
+      .catch((error) => {
+          console.error("Firebase Auth Fel:", error.message);
+          document.getElementById('statusText').innerText = "Kunde inte ansluta (Auth-fel)";
+          document.getElementById('liveIndicator').className = "w-3 h-3 rounded-full bg-red-500";
+      });
 
     const map = L.map('map', { 
         zoomControl: false, dragging: false, scrollWheelZoom: false, touchZoom: false, doubleClickZoom: false, boxZoom: false, keyboard: false 
@@ -261,118 +200,126 @@
     let currentDirection = "unknown";
     let isMovingMode = false;
     
-    const MIDPOINT_LNG = 22.92265; 
+    const MIDPOINT_LAT = 60.03855; 
     const SPEED_THRESHOLD = 1.8; 
     const OFFLINE_TIMEOUT = 5 * 60 * 1000; 
 
-    db.ref(`breadcrumbs/${today}`).orderByKey().limitToLast(5).on('value', snapshot => {
-        let points = [];
-        snapshot.forEach(childSnapshot => {
-            points.push(childSnapshot.val());
+    // Denna funktion körs bara efter att signInAnonymously() har lyckats
+    function startDatabaseListeners() {
+        const db = firebase.database();
+        const todayDate = new Date();
+        const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+        
+        db.ref(`days/${today}/logs`).on('value', s => {
+            document.getElementById('carCount').innerText = Object.values(s.val()||{}).reduce((a,b)=>a+(b.delta||0),0);
+        });
+        
+        db.ref(`turer/${today}`).on('value', s => {
+            document.getElementById('tripCount').innerText = s.numChildren();
         });
 
-        if (points.length === 0) return;
+        db.ref(`breadcrumbs/${today}`).orderByKey().limitToLast(2).on('value', snapshot => {
+            let points = [];
+            snapshot.forEach(childSnapshot => {
+                points.push(childSnapshot.val());
+            });
 
-        const pos = points[points.length - 1]; 
-        const prevPos = points.length > 1 ? points[0] : null; 
-        
-        if (pos && pos.lat && pos.lng) {
-            const dataAge = Date.now() - (pos.ts || Date.now());
-            const isOffline = dataAge > OFFLINE_TIMEOUT;
+            if (points.length === 0) return;
 
-            const speedMps = pos.speed || 0;
-            const speedKnots = (speedMps * 1.94384).toFixed(1);
-            const isCurrentlyMoving = speedKnots >= SPEED_THRESHOLD;
-            const shouldBeArrow = isCurrentlyMoving && !isOffline;
+            const pos = points[points.length - 1];
+            const prevPos = points.length === 2 ? points[0] : null;
             
-            document.getElementById('liveIndicator').className = isOffline ? 
-                "w-3 h-3 rounded-full bg-red-500" : "w-3 h-3 rounded-full bg-emerald-500 animate-pulse";
-            document.getElementById('speedValue').classList.toggle('text-slate-500', isOffline);
-            document.getElementById('speedValue').classList.toggle('text-emerald-400', !isOffline);
+            if (pos && pos.lat && pos.lng) {
+                const dataAge = Date.now() - (pos.ts || Date.now());
+                const isOffline = dataAge > OFFLINE_TIMEOUT;
 
-            let headingDegree = 0;
-            
-            if (prevPos && prevPos.lat && prevPos.lng) {
-                const dy = pos.lat - prevPos.lat;
-                const dx = Math.cos(Math.PI/180 * prevPos.lat) * (pos.lng - prevPos.lng);
+                const speedMps = pos.speed || 0;
+                const speedKnots = (speedMps * 1.94384).toFixed(1);
+                const isCurrentlyMoving = speedKnots >= SPEED_THRESHOLD;
+                const shouldBeArrow = isCurrentlyMoving && !isOffline;
                 
-                if (Math.abs(dx) > 0.000001 || Math.abs(dy) > 0.000001) {
+                document.getElementById('liveIndicator').className = isOffline ? 
+                    "w-3 h-3 rounded-full bg-red-500" : "w-3 h-3 rounded-full bg-emerald-500 animate-pulse";
+                document.getElementById('speedValue').classList.toggle('text-slate-500', isOffline);
+                document.getElementById('speedValue').classList.toggle('text-emerald-400', !isOffline);
+
+                let headingDegree = 0;
+                
+                if (prevPos && prevPos.lat && prevPos.lng) {
+                    const dy = pos.lat - prevPos.lat;
+                    const dx = Math.cos(Math.PI/180 * prevPos.lat) * (pos.lng - prevPos.lng);
                     headingDegree = Math.atan2(dx, dy) * (180 / Math.PI);
-                }
-                
-                // RÄTTAD LOGIK: 
-                // Pettu ligger i Öst (högre longitud). Utö ligger i Väst (lägre longitud).
-                if (isCurrentlyMoving) {
-                    if (pos.lng > prevPos.lng + 0.000005) {
-                        currentDirection = "pettu"; // Rör sig mot öst -> Pettu
-                    } else if (pos.lng < prevPos.lng - 0.000005) {
-                        currentDirection = "mainland"; // Rör sig mot väst -> Utö
+                    
+                    if (isCurrentlyMoving) {
+                        if (pos.lat < prevPos.lat - 0.000005) {
+                            currentDirection = "pettu";
+                        } else if (pos.lat > prevPos.lat + 0.000005) {
+                            currentDirection = "mainland";
+                        }
                     }
                 }
-            }
 
-            if (shouldBeArrow && !isMovingMode) {
-                map.removeLayer(ferryMarker);
-                const arrowIcon = L.divIcon({
-                    html: `<div style="transform: rotate(${headingDegree - 90}deg);" class="moving-ferry-icon">➤</div>`,
-                    className: '',
-                    iconSize: [24, 24],
-                    iconAnchor: [12, 12]
-                });
-                ferryMarker = L.marker([pos.lat, pos.lng], { icon: arrowIcon }).addTo(map);
-                isMovingMode = true;
-            } 
-            else if (!shouldBeArrow && isMovingMode) {
-                map.removeLayer(ferryMarker);
-                ferryMarker = L.circleMarker([pos.lat, pos.lng], {
-                    color: isOffline ? '#64748b' : '#10b981', 
-                    fillColor: isOffline ? '#64748b' : '#10b981', 
-                    fillOpacity: 1, radius: 8
-                }).addTo(map);
-                isMovingMode = false;
-            }
-
-            if (isMovingMode) {
-                const arrowIcon = L.divIcon({
-                    html: `<div style="transform: rotate(${headingDegree - 90}deg);" class="moving-ferry-icon">➤</div>`,
-                    className: '',
-                    iconSize: [24, 24],
-                    iconAnchor: [12, 12]
-                });
-                ferryMarker.setLatLng([pos.lat, pos.lng]);
-                ferryMarker.setIcon(arrowIcon);
-            } else {
-                ferryMarker.setStyle({
-                    color: isOffline ? '#64748b' : '#10b981',
-                    fillColor: isOffline ? '#64748b' : '#10b981'
-                });
-                ferryMarker.setLatLng([pos.lat, pos.lng]);
-            }
-            
-            map.panTo([pos.lat, pos.lng]);
-
-            if (isOffline) {
-                document.getElementById('statusText').innerText = statusDict[currentLang].offline;
-                document.getElementById('speedValue').innerText = "-.-";
-            } else {
-                document.getElementById('speedValue').innerText = isCurrentlyMoving ? speedKnots : "0.0";
-
-                // RÄTTAD HAMN-LOGIK: 
-                // Om longituden är högre än mittpunkten, befinner vi oss i Öst (På Pettu)
-                const isPettuSide = pos.lng > MIDPOINT_LNG;
-
-                if (isCurrentlyMoving) {
-                    if (currentDirection === "pettu") document.getElementById('statusText').innerText = statusDict[currentLang].movingPettu;
-                    else if (currentDirection === "mainland") document.getElementById('statusText').innerText = statusDict[currentLang].movingMainland;
-                    else document.getElementById('statusText').innerText = statusDict[currentLang].moving;
-                } else {
-                    document.getElementById('statusText').innerText = isPettuSide ? statusDict[currentLang].dockedPettu : statusDict[currentLang].dockedMainland;
+                if (shouldBeArrow && !isMovingMode) {
+                    map.removeLayer(ferryMarker);
+                    const arrowIcon = L.divIcon({
+                        html: `<div style="transform: rotate(${headingDegree - 90}deg);" class="moving-ferry-icon">➤</div>`,
+                        className: '',
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    });
+                    ferryMarker = L.marker([pos.lat, pos.lng], { icon: arrowIcon }).addTo(map);
+                    isMovingMode = true;
+                } 
+                else if (!shouldBeArrow && isMovingMode) {
+                    map.removeLayer(ferryMarker);
+                    ferryMarker = L.circleMarker([pos.lat, pos.lng], {
+                        color: isOffline ? '#64748b' : '#10b981', 
+                        fillColor: isOffline ? '#64748b' : '#10b981', 
+                        fillOpacity: 1, radius: 8
+                    }).addTo(map);
+                    isMovingMode = false;
                 }
+
+                if (isMovingMode) {
+                    const arrowIcon = L.divIcon({
+                        html: `<div style="transform: rotate(${headingDegree - 90}deg);" class="moving-ferry-icon">➤</div>`,
+                        className: '',
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12]
+                    });
+                    ferryMarker.setLatLng([pos.lat, pos.lng]);
+                    ferryMarker.setIcon(arrowIcon);
+                } else {
+                    ferryMarker.setStyle({
+                        color: isOffline ? '#64748b' : '#10b981',
+                        fillColor: isOffline ? '#64748b' : '#10b981'
+                    });
+                    ferryMarker.setLatLng([pos.lat, pos.lng]);
+                }
+                
+                map.panTo([pos.lat, pos.lng]);
+
+                if (isOffline) {
+                    document.getElementById('statusText').innerText = statusDict[currentLang].offline;
+                    document.getElementById('speedValue').innerText = "-.-";
+                } else {
+                    document.getElementById('speedValue').innerText = isCurrentlyMoving ? speedKnots : "0.0";
+
+                    const isPettuSide = pos.lat < MIDPOINT_LAT;
+
+                    if (isCurrentlyMoving) {
+                        if (currentDirection === "pettu") document.getElementById('statusText').innerText = statusDict[currentLang].movingPettu;
+                        else if (currentDirection === "mainland") document.getElementById('statusText').innerText = statusDict[currentLang].movingMainland;
+                        else document.getElementById('statusText').innerText = statusDict[currentLang].moving;
+                    } else {
+                        document.getElementById('statusText').innerText = isPettuSide ? statusDict[currentLang].dockedPettu : statusDict[currentLang].dockedMainland;
+                    }
+                }
+                
+                updateLastSeen(pos.ts);
             }
-            
-            updateLastSeen(pos.ts);
-        }
-    });
+        });
+    }
   </script>
 </body>
 </html>

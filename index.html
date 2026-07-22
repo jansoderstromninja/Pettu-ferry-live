@@ -74,7 +74,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.55</p>
+    <p>Version 2.56</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -208,7 +208,7 @@
         const todayDate = new Date();
         const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
         
-        // --- UPPDATERAD LOGIK FÖR DRIFTSTATUS BASERAT PÅ RÅDATA ---
+        // --- SMART IKON-MATCHER FÖR DRIFTSTATUS ---
         db.ref('config/driftstatus').on('value', snap => {
             const status = snap.val();
             const banner = document.getElementById('driftstatusBanner');
@@ -224,7 +224,6 @@
             if (typeof status === 'string') {
                 msg = status;
             } else if (typeof status === 'object') {
-                // Nu kollar vi 'beskrivning' först, om den är tom tar vi 'status'
                 if (status.beskrivning && status.beskrivning.trim() !== "") {
                     msg = status.beskrivning.trim();
                 } else if (status.status && status.status.trim() !== "") {
@@ -232,13 +231,25 @@
                 }
             }
 
-            // Capitalize first letter (t.ex. "tankning" -> "Tankning")
+            // Stor begynnelsebokstav
             if (msg && msg.length > 0) {
                 msg = msg.charAt(0).toUpperCase() + msg.slice(1);
             }
 
             if (msg !== "") {
-                banner.innerText = "⚠️ " + msg;
+                // Sök efter nyckelord för att matcha ikonerna från styrhyttens app
+                let icon = "⚠️"; // Standard om inget matchar (t.ex. "Annat")
+                const lowerMsg = msg.toLowerCase();
+                
+                if (lowerMsg.includes("service") || lowerMsg.includes("underhåll")) {
+                    icon = "🔧";
+                } else if (lowerMsg.includes("tankning")) {
+                    icon = "⛽";
+                } else if (lowerMsg.includes("utryckning")) {
+                    icon = "🚨";
+                }
+
+                banner.innerText = icon + " " + msg;
                 banner.className = "bg-amber-500 text-amber-950 p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
             } else {
                 banner.innerText = "✅ " + statusDict[currentLang].normal;

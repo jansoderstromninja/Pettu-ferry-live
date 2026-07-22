@@ -8,7 +8,7 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Firebase Core -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <!-- Firebase Auth (NY: Krävs för anonym inloggning) -->
+  <!-- Firebase Auth -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <!-- Firebase Database -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
@@ -36,6 +36,10 @@
   </header>
 
   <main class="w-full max-w-md mx-auto space-y-4">
+    
+    <!-- NY: Driftstatus Banner (dold som standard) -->
+    <div id="driftstatusBanner" class="hidden bg-amber-500 text-amber-950 p-3 rounded-2xl text-sm font-bold text-center shadow-lg"></div>
+
     <div id="mapWrapper" class="w-full bg-slate-800 p-2 rounded-3xl"><div id="map" class="w-full h-48 rounded-2xl pointer-events-none"></div></div>
     
     <div class="bg-slate-800 p-6 rounded-3xl text-center shadow-xl">
@@ -68,7 +72,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.49</p>
+    <p>Version 2.50</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -147,7 +151,6 @@
         } catch(e) { console.error("Water level error:", e); }
     }
     
-    // Miljödatan kräver inte inloggning, så den startar direkt
     fetchEnvironmentData();
     setInterval(fetchEnvironmentData, 10 * 60 * 1000);
 
@@ -164,19 +167,15 @@
     document.getElementById('carLabel').innerText = dict[currentLang].car;
     document.getElementById('tripLabel').innerText = dict[currentLang].trip;
 
-    // Firebase Initialization
     firebase.initializeApp({
       apiKey: "AIzaSyDregBlw1hjcHotJAk8938xXAjQKbHXS1Q",
       databaseURL: "https://fordonsraknare-default-rtdb.europe-west1.firebasedatabase.app"
     });
     
-    // -----------------------------------------------------------
-    // NYTT: Autentisera appen anonymt innan databasen anropas!
-    // -----------------------------------------------------------
     firebase.auth().signInAnonymously()
       .then(() => {
-          console.log("Inloggad anonymt. Startar GPS-spårning...");
-          startDatabaseListeners(); // Starta databas-pingen när vi väl har tillstånd
+          console.log("Inloggad anonymt. Startar databaslyssnare...");
+          startDatabaseListeners();
       })
       .catch((error) => {
           console.error("Firebase Auth Fel:", error.message);
@@ -204,12 +203,26 @@
     const SPEED_THRESHOLD = 1.8; 
     const OFFLINE_TIMEOUT = 5 * 60 * 1000; 
 
-    // Denna funktion körs bara efter att signInAnonymously() har lyckats
     function startDatabaseListeners() {
         const db = firebase.database();
         const todayDate = new Date();
         const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
         
+        // --- NY LYSSNARE FÖR DRIFTSTATUS ---
+        db.ref('config/driftstatus').on('value', snap => {
+            const status = snap.val();
+            const banner = document.getElementById('driftstatusBanner');
+            
+            if (status && status.beskrivning && status.beskrivning.trim() !== "") {
+                // innerText hanterar escapingen automatiskt, säkert mot XSS!
+                banner.innerText = status.beskrivning; 
+                banner.classList.remove('hidden');
+            } else {
+                banner.classList.add('hidden');
+                banner.innerText = "";
+            }
+        });
+
         db.ref(`days/${today}/logs`).on('value', s => {
             document.getElementById('carCount').innerText = Object.values(s.val()||{}).reduce((a,b)=>a+(b.delta||0),0);
         });

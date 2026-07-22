@@ -37,8 +37,8 @@
 
   <main class="w-full max-w-md mx-auto space-y-4">
     
-    <!-- Driftstatus Banner -->
-    <div id="driftstatusBanner" class="bg-slate-800 text-slate-400 p-3 rounded-2xl text-sm font-bold text-center border border-slate-700 shadow-lg">
+    <!-- Driftstatus Banner (Diskreta läget som standard) -->
+    <div id="driftstatusBanner" class="text-emerald-500 text-sm font-bold text-center py-1">
       Laddar status...
     </div>
 
@@ -74,7 +74,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.56</p>
+    <p>Version 2.57</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -208,14 +208,14 @@
         const todayDate = new Date();
         const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
         
-        // --- SMART IKON-MATCHER FÖR DRIFTSTATUS ---
+        // --- SMART IKON- & FÄRG-MATCHER FÖR DRIFTSTATUS ---
         db.ref('config/driftstatus').on('value', snap => {
             const status = snap.val();
             const banner = document.getElementById('driftstatusBanner');
             
             if (status === null) {
                 banner.innerText = "✅ " + statusDict[currentLang].normal;
-                banner.className = "bg-slate-800 text-emerald-400 border border-slate-700 p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
+                banner.className = "text-emerald-500 text-sm font-bold text-center py-1";
                 return;
             }
 
@@ -231,30 +231,32 @@
                 }
             }
 
-            // Stor begynnelsebokstav
-            if (msg && msg.length > 0) {
-                msg = msg.charAt(0).toUpperCase() + msg.slice(1);
-            }
+            const lowerMsg = msg.toLowerCase();
 
-            if (msg !== "") {
-                // Sök efter nyckelord för att matcha ikonerna från styrhyttens app
-                let icon = "⚠️"; // Standard om inget matchar (t.ex. "Annat")
-                const lowerMsg = msg.toLowerCase();
-                
-                if (lowerMsg.includes("service") || lowerMsg.includes("underhåll")) {
-                    icon = "🔧";
-                } else if (lowerMsg.includes("tankning")) {
-                    icon = "⛽";
-                } else if (lowerMsg.includes("utryckning")) {
-                    icon = "🚨";
-                }
-
-                banner.innerText = icon + " " + msg;
-                banner.className = "bg-amber-500 text-amber-950 p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
-            } else {
+            // Om meddelandet är tomt ELLER innehåller ordet "normal", visa det diskreta normalläget
+            if (lowerMsg === "" || lowerMsg.includes("normal")) {
                 banner.innerText = "✅ " + statusDict[currentLang].normal;
-                banner.className = "bg-slate-800 text-emerald-400 border border-slate-700 p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
+                banner.className = "text-emerald-500 text-sm font-bold text-center py-1";
+                return;
             }
+
+            // Fixa stor begynnelsebokstav för varningsmeddelanden
+            msg = msg.charAt(0).toUpperCase() + msg.slice(1);
+
+            let icon = "⚠️"; 
+            let bannerStyle = "bg-amber-500 text-amber-950 p-3 rounded-2xl text-sm font-bold text-center shadow-lg"; // GUL bakgrund för service, tankning, annat
+
+            if (lowerMsg.includes("service") || lowerMsg.includes("underhåll")) {
+                icon = "🔧";
+            } else if (lowerMsg.includes("tankning")) {
+                icon = "⛽";
+            } else if (lowerMsg.includes("utryckning")) {
+                icon = "🚨";
+                bannerStyle = "bg-red-600 text-white p-3 rounded-2xl text-sm font-bold text-center shadow-lg"; // RÖD bakgrund för utryckning!
+            }
+
+            banner.innerText = icon + " " + msg;
+            banner.className = bannerStyle;
         });
 
         db.ref(`days/${today}/logs`).on('value', s => {

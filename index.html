@@ -37,7 +37,7 @@
 
   <main class="w-full max-w-md mx-auto space-y-4">
     
-    <!-- NY: Alltid synlig driftstatus -->
+    <!-- Driftstatus Banner -->
     <div id="driftstatusBanner" class="bg-slate-800 text-slate-400 p-3 rounded-2xl text-sm font-bold text-center border border-slate-700 shadow-lg">
       Laddar status...
     </div>
@@ -74,7 +74,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.52</p>
+    <p>Version 2.53</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -106,7 +106,6 @@
     const flags = { 'sv': '🇸🇪', 'fi': '🇫🇮', 'en': '🇬🇧' };
     let currentLang = localStorage.getItem('lang') || 'sv';
     
-    // Ordlistan utökad med "normal"
     const statusDict = {
         sv: { normal: "I normal trafik", movingPettu: "Mot Pettu", movingMainland: "Mot Utö", dockedPettu: "På Pettu", dockedMainland: "På Utö", moving: "På väg", offline: "Ingen GPS-signal från färjan", error: "Väntar på data..." },
         fi: { normal: "Normaaliliikenne", movingPettu: "Kohti Pettua", movingMainland: "Kohti Utötä", dockedPettu: "Petussa", dockedMainland: "Utössä", moving: "Matkalla", offline: "Ei GPS-signaalia lossilta", error: "Odottaa tietoja..." },
@@ -211,21 +210,42 @@
         const todayDate = new Date();
         const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
         
-        // --- UPPDATERAD LYSSNARE FÖR DRIFTSTATUS ---
+        // --- DRIFTSTATUS MED DIAGNOSTIK OCH RÖNTGEN ---
         db.ref('config/driftstatus').on('value', snap => {
             const status = snap.val();
             const banner = document.getElementById('driftstatusBanner');
             
+            // Om databasen är helt tom under config/driftstatus
+            if (status === null) {
+                banner.innerText = "✅ " + statusDict[currentLang].normal;
+                banner.className = "bg-slate-800 text-emerald-400 border border-slate-700 p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
+                return;
+            }
+
             let msg = "";
+            
+            // Försök hitta meddelandet oavsett struktur
             if (typeof status === 'string') {
                 msg = status;
-            } else if (status && status.beskrivning) {
-                msg = status.beskrivning;
+            } else if (typeof status === 'object') {
+                if (status.beskrivning !== undefined) {
+                    msg = status.beskrivning;
+                } else if (status.message !== undefined) {
+                    msg = status.message;
+                } else if (status.text !== undefined) {
+                    msg = status.text;
+                } else {
+                    // OM VI INTE HITTAR RÄTT FÄLT: Skriv ut rådatan på skärmen!
+                    msg = "DEBUG: " + JSON.stringify(status); 
+                }
+                
+                // Om backend skickar en flagga som säger aktiv: false
                 if (status.aktiv === false || status.active === false) {
-                    msg = "";
+                    msg = ""; // Tvinga till normal status
                 }
             }
 
+            // Rendera rutan baserat på om vi hittade en varning eller ej
             if (msg && msg.trim() !== "") {
                 banner.innerText = "⚠️ " + msg;
                 banner.className = "bg-amber-500 text-amber-950 p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
@@ -234,6 +254,7 @@
                 banner.className = "bg-slate-800 text-emerald-400 border border-slate-700 p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
             }
         }, (error) => {
+            // Om Firebase nekar oss att läsa (t.ex. pga rules)
             const banner = document.getElementById('driftstatusBanner');
             banner.innerText = "Kunde inte läsa driftstatus: " + error.message;
             banner.className = "bg-red-500 text-white p-3 rounded-2xl text-sm font-bold text-center shadow-lg";

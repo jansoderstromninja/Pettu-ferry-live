@@ -37,8 +37,8 @@
 
   <main class="w-full max-w-md mx-auto space-y-4">
     
-    <!-- NY: Driftstatus Banner (dold som standard) -->
-    <div id="driftstatusBanner" class="hidden bg-amber-500 text-amber-950 p-3 rounded-2xl text-sm font-bold text-center shadow-lg"></div>
+    <!-- Driftstatus Banner (dold som standard) -->
+    <div id="driftstatusBanner" class="hidden"></div>
 
     <div id="mapWrapper" class="w-full bg-slate-800 p-2 rounded-3xl"><div id="map" class="w-full h-48 rounded-2xl pointer-events-none"></div></div>
     
@@ -72,7 +72,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.50</p>
+    <p>Version 2.51</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -168,7 +168,7 @@
     document.getElementById('tripLabel').innerText = dict[currentLang].trip;
 
     firebase.initializeApp({
-      apiKey: "AIzaSyDregBlw1hjcHotJAk8938xXAjQKbHXS1Q",
+      apiKey: "IzaSyDregBlw1hjcHotJAk8938xXAjQKbHXS1Q",
       databaseURL: "https://fordonsraknare-default-rtdb.europe-west1.firebasedatabase.app"
     });
     
@@ -208,19 +208,35 @@
         const todayDate = new Date();
         const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
         
-        // --- NY LYSSNARE FÖR DRIFTSTATUS ---
+        // --- UPPDATERAD LYSSNARE FÖR DRIFTSTATUS MED DIAGNOSTIK ---
         db.ref('config/driftstatus').on('value', snap => {
             const status = snap.val();
             const banner = document.getElementById('driftstatusBanner');
             
-            if (status && status.beskrivning && status.beskrivning.trim() !== "") {
-                // innerText hanterar escapingen automatiskt, säkert mot XSS!
-                banner.innerText = status.beskrivning; 
-                banner.classList.remove('hidden');
+            let msg = "";
+            // Tillåt både strängar och objekt för att vara säker
+            if (typeof status === 'string') {
+                msg = status;
+            } else if (status && status.beskrivning) {
+                msg = status.beskrivning;
+                // Om din databas har en av/på-flagga (ex: aktiv: false)
+                if (status.aktiv === false || status.active === false) {
+                    msg = "";
+                }
+            }
+
+            if (msg && msg.trim() !== "") {
+                banner.innerText = msg;
+                banner.className = "bg-amber-500 text-amber-950 p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
             } else {
-                banner.classList.add('hidden');
+                banner.className = "hidden";
                 banner.innerText = "";
             }
+        }, (error) => {
+            // Skriver ut säkerhetsfelet direkt på skärmen om databasen nekar oss!
+            const banner = document.getElementById('driftstatusBanner');
+            banner.innerText = "Kunde inte läsa driftstatus: " + error.message;
+            banner.className = "bg-red-500 text-white p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
         });
 
         db.ref(`days/${today}/logs`).on('value', s => {

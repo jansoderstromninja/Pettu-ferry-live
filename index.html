@@ -37,9 +37,9 @@
 
   <main class="w-full max-w-md mx-auto space-y-4">
     
-    <!-- Driftstatus Banner -->
-    <div id="driftstatusBanner" class="bg-slate-800 text-slate-400 p-3 rounded-2xl text-sm font-bold text-center border border-slate-700 shadow-lg">
-      Laddar status...
+    <!-- RAW DATA BANNER FÖR FELSÖKNING -->
+    <div id="driftstatusBanner" class="bg-blue-600 text-white p-3 rounded-2xl text-xs font-mono break-all text-left shadow-lg">
+      Väntar på rådata från databasen...
     </div>
 
     <div id="mapWrapper" class="w-full bg-slate-800 p-2 rounded-3xl"><div id="map" class="w-full h-48 rounded-2xl pointer-events-none"></div></div>
@@ -74,7 +74,7 @@
   </div>
   
   <footer class="text-center mt-6 text-[10px] text-slate-500 font-mono space-y-1">
-    <p>Version 2.53</p>
+    <p>Version 2.54 (RAW DATA)</p>
     <p>Senast uppdaterad: <span id="updateTime">--:--:--</span></p>
   </footer>
 
@@ -107,9 +107,9 @@
     let currentLang = localStorage.getItem('lang') || 'sv';
     
     const statusDict = {
-        sv: { normal: "I normal trafik", movingPettu: "Mot Pettu", movingMainland: "Mot Utö", dockedPettu: "På Pettu", dockedMainland: "På Utö", moving: "På väg", offline: "Ingen GPS-signal från färjan", error: "Väntar på data..." },
-        fi: { normal: "Normaaliliikenne", movingPettu: "Kohti Pettua", movingMainland: "Kohti Utötä", dockedPettu: "Petussa", dockedMainland: "Utössä", moving: "Matkalla", offline: "Ei GPS-signaalia lossilta", error: "Odottaa tietoja..." },
-        en: { normal: "Normal traffic", movingPettu: "Towards Pettu", movingMainland: "Towards Utö", dockedPettu: "At Pettu", dockedMainland: "At Utö", moving: "En route", offline: "No GPS signal from the ferry", error: "Waiting for data..." }
+        sv: { movingPettu: "Mot Pettu", movingMainland: "Mot Utö", dockedPettu: "På Pettu", dockedMainland: "På Utö", moving: "På väg", offline: "Ingen GPS-signal från färjan", error: "Väntar på data..." },
+        fi: { movingPettu: "Kohti Pettua", movingMainland: "Kohti Utötä", dockedPettu: "Petussa", dockedMainland: "Utössä", moving: "Matkalla", offline: "Ei GPS-signaalia lossilta", error: "Odottaa tietoja..." },
+        en: { movingPettu: "Towards Pettu", movingMainland: "Towards Utö", dockedPettu: "At Pettu", dockedMainland: "At Utö", moving: "En route", offline: "No GPS signal from the ferry", error: "Waiting for data..." }
     };
 
     const dict = {
@@ -210,53 +210,17 @@
         const todayDate = new Date();
         const today = new Date(todayDate.getTime() - (todayDate.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
         
-        // --- DRIFTSTATUS MED DIAGNOSTIK OCH RÖNTGEN ---
+        // --- OFILTRERAD RAW DATA DIAGNOSTIK ---
         db.ref('config/driftstatus').on('value', snap => {
             const status = snap.val();
             const banner = document.getElementById('driftstatusBanner');
             
-            // Om databasen är helt tom under config/driftstatus
-            if (status === null) {
-                banner.innerText = "✅ " + statusDict[currentLang].normal;
-                banner.className = "bg-slate-800 text-emerald-400 border border-slate-700 p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
-                return;
-            }
-
-            let msg = "";
+            // Vi dumpar exakt det databasen skickar oss. Inget filter, ingen logik.
+            banner.innerText = "RAW: " + JSON.stringify(status);
             
-            // Försök hitta meddelandet oavsett struktur
-            if (typeof status === 'string') {
-                msg = status;
-            } else if (typeof status === 'object') {
-                if (status.beskrivning !== undefined) {
-                    msg = status.beskrivning;
-                } else if (status.message !== undefined) {
-                    msg = status.message;
-                } else if (status.text !== undefined) {
-                    msg = status.text;
-                } else {
-                    // OM VI INTE HITTAR RÄTT FÄLT: Skriv ut rådatan på skärmen!
-                    msg = "DEBUG: " + JSON.stringify(status); 
-                }
-                
-                // Om backend skickar en flagga som säger aktiv: false
-                if (status.aktiv === false || status.active === false) {
-                    msg = ""; // Tvinga till normal status
-                }
-            }
-
-            // Rendera rutan baserat på om vi hittade en varning eller ej
-            if (msg && msg.trim() !== "") {
-                banner.innerText = "⚠️ " + msg;
-                banner.className = "bg-amber-500 text-amber-950 p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
-            } else {
-                banner.innerText = "✅ " + statusDict[currentLang].normal;
-                banner.className = "bg-slate-800 text-emerald-400 border border-slate-700 p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
-            }
         }, (error) => {
-            // Om Firebase nekar oss att läsa (t.ex. pga rules)
             const banner = document.getElementById('driftstatusBanner');
-            banner.innerText = "Kunde inte läsa driftstatus: " + error.message;
+            banner.innerText = "BANNAD AV FIREBASE: " + error.message;
             banner.className = "bg-red-500 text-white p-3 rounded-2xl text-sm font-bold text-center shadow-lg";
         });
 
